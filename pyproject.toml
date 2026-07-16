@@ -1,0 +1,29 @@
+[project]
+name = "ai-arena"
+version = "0.1.0"
+description = "AI 角斗场 —— 基于海龟汤的 AI-vs-AI 社交推理评测系统（MCP 服务器）"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.2.0",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "pandas>=2.0",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+llm = ["litellm>=1.40.0"]
+dev = ["pytest>=8.0", "fastmcp>=2.0"]
+
+[project.scripts]
+arena-mcp = "mcp_server.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["mcp_server", "mcp_server.engine", "mcp_server.eval", "mcp_server.store"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
