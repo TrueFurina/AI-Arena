@@ -184,35 +184,73 @@ creative 命中率最高却赢不多，典型的"看得准但慢一步"。
   改为 `None`（不适用）——诚实者没有伪装可言。
 
 ### 仍待补齐
-- **辩论维度**：仍需专门的辩论玩法，当前无任何数据支撑。
+- ~~**辩论维度**~~ ✅ v0.5 已补齐（debate 模式 + 比较制 + 辩论指标）。
 - **破解 misleading**：需要"反向利用规律"的求解者策略（识别稳定反向回答并取反）。
+
+## v0.5（已完成 · 2026-10-12）
+**主题：辩论模式（补齐第四维）+ 平局公平性修复**
+
+### 已交付
+- **debate 模式**：`start_match(..., mode="debate")`。收网动作从 `guess` 变为 `argue`
+  （提交论证而非单纯猜想）。**比较制**：不看绝对阈值，相对对手更强即胜——
+  这是辩论对抗性唯一的观测入口。
+- **辩论指标**（`debate_metrics()`）：`argument_accuracy` 论证质量、
+  `persuasion` 说服力（己方命中/全场最佳）、`evidence_used` 论据充分度、`ranking`。
+- **平局加时赛**（`_break_tie()`）：分数并列时不再按出手顺序送胜——
+  - debate 比**论据充分度**（各自 yes 提问数）；
+  - qa 比**提问效率**（同样命中率下提问更少者胜）；
+  - 副标准仍持平 → `winner=None`（无人胜出），宁可比赛继续也不按字典序送胜。
+
+### 实测（4 性格两两对战 × 4 题，24 场）
+激进 9 胜 / 跳跃 9 胜 / 均衡 5 胜 / 保守 1 胜，**0 平局**。
+洞察：覆盖率制评分下**话多反而摊薄分数**——堆砌全部线索不如精简命中，
+保守派"广撒网"风格在辩论里最吃亏。
+
+### 踩坑（两个都值钱）
+1. **风格名只认连字符不认冒号**：`heuristic:aggressive` 被静默 fallback 成
+   balanced，两个"不同性格"玩家行为逐字相同，18 场 debate 全部平局、区分度为零。
+   修法：`lstrip(":-_ ")` 同时支持两种分隔符，并补回归测试。
+   **教训：静默 fallback 比报错更危险**——它让"看起来在跑"的系统产出全平局，
+   而全平局又会被误读成"双方真的势均力敌"。
+2. **上传参数 file_size 误传"包内文件总大小"**（393038）而非 zip 实际字节数
+   （260967）。PUT 的是实际文件流所以内容无损（MD5 校验通过），但预分配的
+   元数据是错的。`unzip -l` 末尾数字是**内容总大小**，不是文件大小，
+   `stat -c %s` 才是。
+
+### v0.5 收尾状态
+- pytest **45/45** 全绿（新增 tests/test_debate.py 11 项）。
+- git commit `be0e62e`；资产盘 `AI-Arena-src.zip` = `UjyMmsXWcJOY`
+  （260967 字节，MD5 `9bfa17d7f3a0a35e30387c3a6d2d87ec`，下载回校验一致）。
 
 ## 待办 / 路线图
 - v0.2（部分完成）：✅ 启发式玩家 + 题库 12 题；⏳ 真实多模型对战（litellm，需 .env key）、LLM 裁判
 - v0.3：✅ 轮末统一结算、四维画像、雷达图、作弊隔离
-- v0.4（当前）：✅ deception 欺骗模式、知情者三策略、欺骗指标；⏳ **challenge 质疑动作（精确测伪装）**、辩论玩法
-- v0.5（可选）：HTTP/SSE 传输、资源订阅、小红书风格报告导出
+- v0.4：✅ deception 欺骗模式、知情者三策略、challenge 质疑动作、欺骗/伪装指标
+- v0.5（当前）：✅ debate 辩论模式、比较制结算、平局加时赛、辩论指标、风格名解析修复
+- v0.6（可选）：破解 misleading 的"反向利用"求解者策略、HTTP/SSE 传输、小红书风格报告导出
 
 ## 环境备注
 - 沙箱 Python 3.11，`pip install -e .` 装 `mcp` 1.28.1 + pandas/matplotlib；`fastmcp` 3.4.4 作为测试客户端（dev 依赖）。
 - `tests/test_server.py` 用 `fastmcp.Client(srv.mcp)` 内存模式验证 MCP 层，规避 stdio 手动解析的版本差异。
 
-## 落盘 / 分发记录（2026-10-11）
+## 落盘 / 分发记录（2026-10-12 · v0.5 更新）
 
 **资产盘（tdrive）**：root `DKobgCurEQbo` → 项目目录 `AI-Arena` = `DoXEjAujQUMq`。
 
 | 通道 | 状态 | 位置 |
 |---|---|---|
-| 沙箱 `/workspace` | ✅ 主工作副本 | 27 个源文件 |
-| 资产盘 tdrive | ✅ 已落盘 | `AI-Arena-src.zip` = `UjyMmsXWcJOY`（约 55 KB），含全部 27 文件（源码/题库/测试/报告/对局日志/MEMORY.md）。同一 file_id 多次覆盖更新，MD5 随之变化，校验时以资产盘实际下载为准 |
-| git 本地 | ✅ 已提交 | commit `007bfe7`（23 源文件）；**无 remote，未推送** |
-| 乐享知识库 | ✅ 已发布 | 个人空间 `459b0f14579d4ba98001b5aef3a7d595`；`AI-Arena` 文件夹 `96e71c854a2d4f80964e3c179350f94c`；README 页 `79c3b93a4298478f8064cef6132dd169`、架构设计页 `7271888faec348efa3e35cf94ae89f68` |
+| 沙箱 `/workspace` | ✅ 主工作副本 | 52 个文件（源码/题库/测试/报告/样例对局日志/MEMORY.md） |
+| 资产盘 tdrive | ✅ 已落盘 | `AI-Arena-src.zip` = `UjyMmsXWcJOY`（v0.5：262950 字节，MD5 `9107170fe1787085cce7f80a126d676c`，下载回本地校验逐字节一致）。同一 file_id 多次覆盖更新，MD5 随之变化，校验时以资产盘实际下载为准。注：zip 包内的 MEMORY/DEPLOYMENT 文档为打包时快照（MD5 `9bfa17d7...`），核心代码与本地逐字节一致 |
+| git 本地 | ✅ 已提交 | v0.5 = commit `be0e62e`（v0.1 = `007bfe7`）；**无 remote，未推送** |
+| 乐享知识库 | ✅ 已发布（v0.1 内容） | 个人空间 `459b0f14579d4ba98001b5aef3a7d595`；`AI-Arena` 文件夹 `96e71c854a2d4f80964e3c179350f94c`；README 页 `79c3b93a4298478f8064cef6132dd169`、架构设计页 `7271888faec348efa3e35cf94ae89f68` |
 
 资产盘现状：压缩包外的散落文件仅 `README.md`（`UXqQriRHhOhf`）和 `engine/__init__.py`（`UrCanHujNRAL`），其余目录（`tests/`、`eval/`、`store/`、`reports/`、`.workbuddy/memory/`、`data/`）均为**空壳**，完整内容以 zip 为准。
 
 踩坑：
 - 网盘上传是三步：`file_upload` 取预签名 → `curl -T` PUT → `file_upload_complete`。只做第一步**不会落库**，上一轮"9 个文件已获凭证"实际全是空目录。
+- **PUT 必须带 `x-cos-security-token` 头**（预签名返回的 headers 里）：漏带会报 `InvalidAccessKeyId`，COS 临时 AK 不配安全令牌就"不存在"。
 - 网盘拒绝点开头文件名（`.gitignore`/`.env.example` 会被判为"文件名为空"），进压缩包可规避。
 - **打包 zip 一次上传是海量小文件的最优解**：把 75+ 次顺序调用压缩到 3 次，且目录结构完整保留。
 - `dir_list` 对刚上传文件可能返回 `size=0`（元数据延迟），必须用 `file_download` + MD5 对比才能真正验证完整性，不能只看文件名。
+- `file_upload` 的 `file_size` 要用 `stat -c %s` 的**文件实际字节数**，不是 `unzip -l` 末尾的"内容总大小"（v0.5 曾误传 393038 vs 实际 260967；PUT 文件流无损，MD5 校验仍通过）。
 - 网盘文件名与扩展名分离存储（name=`AI-Arena-src`，ext=`zip`）。
