@@ -99,22 +99,46 @@ def list_matches(limit: int | None = None, status: str | None = None) -> list[di
 
 @mcp.tool()
 def analyze_match(match_id: str) -> dict[str, Any]:
-    """对单局做基础能力分析：每位玩家的提问数、最佳猜想命中率、是否获胜。"""
-    s = game.get_state(match_id)
-    if s is None:
-        # 尝试从磁盘加载
-        from mcp_server.store import logs
-        s = logs.load_match(match_id)
+    """对单局做能力分析：提问数、命中率、四维画像；deception 模式额外给出欺骗指标。
+
+    优先从磁盘加载——欺骗记录 `_lie_log` 只落盘、不进玩家可见状态，
+    从内存状态取会拿不到撒谎数据。
+    """
+    from mcp_server.store import logs
+
+    s = logs.load_match(match_id) or game.get_state(match_id)
     if s is None:
         return {"error": f"不存在 match_id={match_id}"}
-    return {"match_id": match_id, "metrics": metrics.match_metrics(s)}
+    out: dict[str, Any] = {"match_id": match_id, "metrics": metrics.match_metrics(s)}
+    dec = metrics.deception_metrics(s)
+    if dec:
+        out["deception"] = dec
+    deb = metrics.debate_metrics(s)
+    if deb:
+        out["debate"] = deb
+    return out
 
 
 @mcp.tool()
-def get_leaderboard() -> dict[str, Any]:
-    """跨所有对局聚合各模型表现：对局数、胜场、胜率、平均最佳猜想命中率。"""
-    board = metrics.compute_leaderboard()
+def get_leaderboard(include_cheating: bool = False) -> dict[str, Any]:
+    """跨所有对局聚合各模型表现：对局数、胜场、胜率、平均最佳猜想命中率。
+
+    include_cheating 默认 False —— 作弊玩家（mock 预言机）掌握真相、几乎必定
+    碾压全场，混进排名会让结论失真，故默认剔除。
+    """
+    board = metrics.compute_leaderboard(exclude_cheating=not include_cheating)
     return {"leaderboard": board.to_dict("records")}
+
+
+@mcp.tool()
+def get_profiles(include_cheating: bool = False) -> dict[str, Any]:
+    """各模型的四维推理画像：推理准确 / 信息效率 / 命中广度 / 收网果断。
+
+    ⚠️ 项目目标是推理/欺骗/伪装/辩论四维能力，但后三者需对抗模式才能观测，
+    当前画像只反映推理侧的四种风格，不是完整的四维能力评分。
+    """
+    prof = metrics.compute_profile(exclude_cheating=not include_cheating)
+    return {"profiles": prof.to_dict("records")}
 
 
 @mcp.tool()

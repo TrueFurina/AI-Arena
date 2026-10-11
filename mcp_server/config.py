@@ -34,6 +34,22 @@ MODEL_REGISTRY: dict[str, tuple[str, str | None]] = {
     "kimi": ("moonshot/moonshot-v1-8k", "MOONSHOT_API_KEY"),
 }
 
+# 离线玩家（无需任何 API key，用于本地跑通与对照评测）
+# - mock：预言机，知道真相，仅用于验证流程，**不参与能力评测**
+# - heuristic*：不作弊的启发式玩家，行为差异带来真实的得分区分度
+OFFLINE_PLAYERS: dict[str, str] = {
+    "mock": "预言机玩家：掌握真相，仅用于跑通流程，不参与能力评测",
+    "heuristic": "启发式玩家（均衡）：汤面词 + 常识假设交替提问，六成进度后收网",
+    "heuristic-aggressive": "启发式玩家（激进）：先赌大方向、提问少、收网早",
+    "heuristic-conservative": "启发式玩家（保守）：穷举汤面细节、提问多、收网晚",
+    "heuristic-creative": "启发式玩家（跳跃）：大量通用假设、顺序打乱、方差大",
+    # deception 模式：知情者不是求解者，不参与求解者排名，只评估欺骗/伪装能力
+    "insider": "知情者（摇摆策略）：真话假话混着说，最难对付",
+    "insider-honest": "知情者（诚实）：始终如实回答，用作对照组基准",
+    "insider-misleading": "知情者（激进欺骗）：始终反向回答，规律明显易被识破",
+    "insider-mixed": "知情者（摇摆）：50% 概率撒谎",
+}
+
 # 默认参数
 DEFAULT_MAX_ROUNDS = int(_getenv("ARENA_DEFAULT_MAX_ROUNDS", "20"))
 GUESS_THRESHOLD = float(_getenv("ARENA_GUESS_THRESHOLD", "0.6"))
@@ -56,7 +72,10 @@ def has_api_key(friendly: str) -> bool:
 
 
 def list_models() -> list[dict]:
-    """返回模型注册表快照（不含任何 key），供 arena://models 资源使用。"""
+    """返回模型注册表快照（不含任何 key），供 arena://models 资源使用。
+
+    除真实 LLM 外，还列出离线玩家（mock / heuristic*），便于客户端直接开本地对照局。
+    """
     out = []
     for name, (model_str, env) in MODEL_REGISTRY.items():
         out.append(
@@ -64,6 +83,18 @@ def list_models() -> list[dict]:
                 "name": name,
                 "litellm_model": model_str,
                 "configured": has_api_key(name),
+                "offline": False,
+                "description": "真实模型（需配置 API key）",
+            }
+        )
+    for name, desc in OFFLINE_PLAYERS.items():
+        out.append(
+            {
+                "name": name,
+                "litellm_model": None,
+                "configured": True,  # 离线玩家无需 key，始终可用
+                "offline": True,
+                "description": desc,
             }
         )
     return out

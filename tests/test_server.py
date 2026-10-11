@@ -38,8 +38,13 @@ def test_tools_direct_integration():
     assert "metrics" in analysis
     assert analysis["metrics"][final["winner"]]["win"] is True
 
+    # 默认排行榜剔除作弊玩家（mock 预言机掌握真相，成绩不反映真实能力）
     board = srv.get_leaderboard()
-    assert any(r["model"] == "mock" for r in board["leaderboard"])
+    assert "mock" not in {r["model"] for r in board["leaderboard"]}
+
+    # 显式要求时才包含
+    board_all = srv.get_leaderboard(include_cheating=True)
+    assert "mock" in {r["model"] for r in board_all["leaderboard"]}
 
 
 def test_list_puzzles_no_truth():
