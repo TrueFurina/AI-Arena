@@ -5,3 +5,5 @@ flask>=3.0
 pandas>=2.0
 matplotlib>=3.8
 requests>=2.31
+# L3 链上凭证：ECDSA 签名与验签（复用真实共识链时亦依赖此库）
+cryptography>=42.0
