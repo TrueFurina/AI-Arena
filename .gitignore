@@ -1,0 +1,41 @@
+# ============================================================
+# AI-Arena —— 根 .gitignore（保护密钥与本地产物，绝不入库）
+# ============================================================
+
+# ---- 密钥 / 本地配置（真实 key 绝不提交；仅 .env.example 模板可入库）----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# ---- 运行产物（对局日志 / 评分图 / 聚合报告，均为本地可再生数据）----
+logs/
+analysis/
+mcp-server/data/matches/
+mcp-server/reports/
+web-proto/logs/
+web-proto/analysis/
+workspace/logs/
+workspace/analysis/
+*.png
+*.tmp
+
+# ---- 内部工作记忆（项目笔记，不对外）----
+.workbuddy/
+
+# ---- 归档 / 打包产物 ----
+*.zip
+AI-Arena-src.zip
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
