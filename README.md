@@ -1,25 +1,30 @@
 # AI-Arena · 项目总览
 
-AI vs AI 社交推理游戏评测台（海龟汤起步）：让不同 LLM 在**推理 / 欺骗 / 伪装 / 辩论**四个维度上对抗，对局过程落结构化 JSON 日志，用量化指标横向比较各模型能力。本质是「能力探针 + 评测报告生成器」，不是游戏产品。
+AI vs AI 社交推理游戏评测台（海龟汤起步）：让不同 LLM 在**推理 / 欺骗 / 伪装 / 辩论**四个维度上对抗，对局过程落结构化 JSON 日志，用量化指标横向比较各模型能力。
+
+**定位（2026-10-12 用户拍板）**：升级为**「主线 LLM + MARL agent 的链上可验证评测台」**，对齐多智能体主线四层（L1 LLM 决策 / L2 MARL 执行 / L3 链上可信 / L4 展示）。同类的剧本杀平台已放弃，本项为唯一主攻项目。后续路线见 [`ROADMAP.md`](ROADMAP.md)。
 
 ## 目录结构（三条开发线）
 
 | 目录 | 路线 | 状态 |
 |---|---|---|
-| `mcp-server/` | MCP 服务器（FastMCP / stdio） | ✅ **v0.5 已完成**（2026-10-12）：启发式玩家四性格、12 题题库、轮末统一结算、deception 欺骗模式 + challenge 质疑、debate 辩论模式（比较制 + 平局加时赛）；pytest 45/45；git 4 个提交（含依赖界修复 `bac7c06`）；已部署资产盘（MD5 校验一致） |
-| `web-proto/` | Flask 网页原型（端口 8860） | 🟡 原型可跑：`zai/glm-4-flash` 真实模型端到端已验证；llm.py 加固版（重试 + 角色降级）；ashbwin 免费端点不可达（可弃） |
-| `workspace/` | 文档 / 技能 / M0–M6 脚手架线 | 📚 设计资产库：12 篇设计文档（`doc/`）+ 4 篇规格（`specs/`）+ 8 个项目技能（`.codebuddy/skills/`）+ tournament/evaluate/report_share 等编排脚本；游戏机制概念已被 `mcp-server/` 吸收实现 |
+| `web-proto/` | Flask 评测台（端口 8860） | 🔒 **唯一主线**（2026-10-13 定）：L1 多 LLM 对抗 + L2 RL/MARL 策略 + 指标口径单一真值 + held-out 泛化协议；**pytest 37/37 全绿**；题库 12 题 |
+| `mcp-server/` | MCP 服务器（FastMCP / stdio） | 🧊 **冻结归档**（2026-10-13 定）：v0.5 已完成、pytest 45/45，四性格玩家 / 12 题 / deception / challenge / debate 俱全。**不再新增功能**，其游戏机制概念已被主线吸收 |
+| `workspace/` | 文档 / 技能 / M0–M6 脚手架线 | 📚 设计资产库：12 篇设计文档（`doc/`）+ 4 篇规格（`specs/`）+ 8 个项目技能（`.codebuddy/skills/`）+ tournament/evaluate/report_share 等编排脚本 |
 
 ## 各线快速入口
 
 ```bash
-# MCP 主线（零 key 可跑）
-cd mcp-server && python run.py                 # 启动 MCP 服务器（stdio）
-cd mcp-server && pytest                        # 45/45
-
-# Flask 原型（零 key 可跑）
+# 主线：Flask 评测台（零 key 可跑）
 cd web-proto && python run_game.py             # 命令行单局
 cd web-proto && python web_app.py              # Web 界面 :8860
+cd web-proto && python train_rl.py             # 零成本 RL 训练（Mock 环境，不调 API）
+cd web-proto && python eval_generalization.py  # held-out 泛化评测
+cd web-proto && pytest tests/ -q               # 37/37
+
+# 冻结线：MCP 服务器（归档，不再新增功能）
+cd mcp-server && python run.py                 # 启动 MCP 服务器（stdio）
+cd mcp-server && pytest                        # 45/45
 
 # 工作区线（零 key 可跑）
 cd workspace && python run/tournament.py --mock
@@ -46,9 +51,18 @@ cd workspace && python run/tournament.py --mock
 
 环境：`mcp-server` 用 venv `~/.workbuddy/binaries/python/envs/ai-arena`；两条原型线共用 `envs/ai-arena-proto`。安装走阿里云源（全局清华源曾取不到 setuptools）。真实模型对战涉及计费，待成本报批后再跑。
 
-## 路线决策（待用户定夺）
+## 路线决策（2026-10-13 已定，不再是待定项）
 
-MCP 服务器 vs Flask 网页版的最终路线在各线 MEMORY.md 中均记录为**未定**。当前以 `mcp-server/` 为最新完成主线。
+| 决策 | 结论 | 理由 |
+|---|---|---|
+| **主线** | `web-proto/` 为唯一主线 | L1/L2 全部成果（含 37 例测试、指标口径、泛化协议）都在这条线上，继续投入边际成本最低 |
+| `mcp-server/` | **冻结归档**，不删不弃 | v0.5 完整可用（45/45），其游戏机制已被主线吸收；保留作为可回溯资产，但不再新增功能 |
+| `workspace/` | 保持资产库定位 | 文档与编排脚本，按需取用 |
+| 新工作落点 | 一律在 `web-proto/` | 避免双线维护成本（此前两线并行是明确的待解问题） |
+
+> 历史背景：MCP vs Flask 的路线之争在各线 MEMORY.md 中长期记为「未定」。
+> 本次拍板的实质不是「哪个架构更好」，而是**已有成果集中在哪条线上**——
+> 选择依据是资产分布而非架构偏好。
 
 ## 整理记录（2026-10-12）
 
