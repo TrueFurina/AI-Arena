@@ -1,0 +1,14 @@
+# 密钥与本地配置（绝不提交）
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行产物（按需保留，可不提交）
+logs/
+*.png
+
+# 系统
+.DS_Store

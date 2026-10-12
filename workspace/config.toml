@@ -1,0 +1,62 @@
+# AI-Arena 模型注册表（M3 多模型对战）
+# tournament.py 读取本文件，对 enabled 模型 × 每题跑 N 局。
+#
+# 字段说明（每条 [[models]]）：
+#   alias     展示名（用于日志 meta.model 与报告分组）
+#   litellm   完整 litellm 模型名；留空表示用 mock 玩家（零 key）
+#   enabled   是否参与对战（真实模型需先在 .env 填对应 key 才置 true）
+#   mock      非空表示 mock 玩家："strong"=逐事实问(还原度≈1) / "weak"=问无关(还原度≈0)
+#   note      备注
+#
+# 零 key 即可跑：下方 mock-strong / mock-weak 默认 enabled，真实模型默认关闭。
+
+[globals]
+max_turns = 20
+runs_per_puzzle = 2      # 每题每模型跑几局（取均值更稳定）
+gm = "smart"             # smart(关键词感知,默认) / mock(逐字)
+log_dir = "logs"
+evaluate_after = true    # 跑完自动调用 evaluate.py 聚合出报告
+
+# ---------- 真实模型（填好 .env 的 key 后把 enabled 改为 true）----------
+[[models]]
+alias = "deepseek"
+litellm = "deepseek/deepseek-chat"
+enabled = false
+note = "DeepSeek，推理强、便宜，首发推荐"
+
+[[models]]
+alias = "qwen"
+litellm = "qwen/qwen-plus"
+enabled = false
+note = "通义千问 Qwen"
+
+[[models]]
+alias = "kimi"
+litellm = "moonshot/moonshot-v1-8k"
+enabled = false
+note = "Kimi 月之暗面"
+
+[[models]]
+alias = "gpt"
+litellm = "openai/gpt-4o-mini"
+enabled = false
+note = "OpenAI GPT"
+
+[[models]]
+alias = "claude"
+litellm = "anthropic/claude-3-5-sonnet-20241022"
+enabled = false
+note = "Anthropic Claude"
+
+# ---------- 零 key 基线（立即可跑，用于验证编排与指标）----------
+[[models]]
+alias = "mock-strong"
+mock = "strong"
+enabled = true
+note = "逐事实提问基线，还原度应≈1.00"
+
+[[models]]
+alias = "mock-weak"
+mock = "weak"
+enabled = true
+note = "问无关问题基线，还原度应≈0.00"

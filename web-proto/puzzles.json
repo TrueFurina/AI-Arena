@@ -1,0 +1,56 @@
+[
+  {
+    "soup_id": "turtle_soup_001",
+    "title": "海龟汤",
+    "surface": "一个人走进一家餐厅，点了一碗海龟汤。他喝了一口，随即走出餐厅开枪自杀了。",
+    "solution": "他曾遭遇海难，与同伴漂流在海上。同伴饿死，他们为了活命把死去的同伴的肉当成『海龟汤』吃下。获救后他走进餐厅点了一碗真正的海龟汤，喝了一口发现味道和当年完全不同，瞬间意识到当年吃的是同伴的肉，崩溃自杀。",
+    "golden_qa": [
+      {"contains": "海难", "answer": "是"},
+      {"contains": "同伴", "answer": "是"},
+      {"contains": "吃人", "answer": "是"},
+      {"contains": "肉", "answer": "是"},
+      {"contains": "获救", "answer": "是"},
+      {"contains": "味道", "answer": "是"},
+      {"contains": "女人", "answer": "否"},
+      {"contains": "钱", "answer": "无关"},
+      {"contains": "谋杀", "answer": "否"}
+    ],
+    "tags": ["经典", "悬疑"]
+  },
+  {
+    "soup_id": "turtle_soup_002",
+    "title": "半根火柴",
+    "surface": "一个男人躺在沙漠中，已经死了，手里紧紧攥着半根火柴。",
+    "solution": "他和几个人乘坐热气球横穿沙漠，途中热气球超重，必须减轻重量。他们先扔下行李，仍不够，于是决定抽签，抽到半根火柴（被折断的那根）的人跳下去。他抽到了，于是跳下摔死。",
+    "golden_qa": [
+      {"contains": "热气球", "answer": "是"},
+      {"contains": "沙漠", "answer": "是"},
+      {"contains": "抽签", "answer": "是"},
+      {"contains": "超重", "answer": "是"},
+      {"contains": "跳", "answer": "是"},
+      {"contains": "火柴", "answer": "是"},
+      {"contains": "中毒", "answer": "否"},
+      {"contains": "被杀", "answer": "否"},
+      {"contains": "水", "answer": "无关"}
+    ],
+    "tags": ["经典", "推理"]
+  },
+  {
+    "soup_id": "turtle_soup_003",
+    "title": "妹妹的葬礼",
+    "surface": "一个女孩参加妹妹的葬礼，在葬礼上对一个陌生男子一见钟情。葬礼结束后她再也没有见过他，于是她杀了自己的亲姐姐。",
+    "solution": "她想：如果再办一次葬礼，那个男子可能还会来。于是她杀了姐姐，只为再见他一面。",
+    "golden_qa": [
+      {"contains": "葬礼", "answer": "是"},
+      {"contains": "姐姐", "answer": "是"},
+      {"contains": "男子", "answer": "是"},
+      {"contains": "一见钟情", "answer": "是"},
+      {"contains": "再见", "answer": "是"},
+      {"contains": "嫉妒", "answer": "否"},
+      {"contains": "遗产", "answer": "否"},
+      {"contains": "钱", "answer": "无关"},
+      {"contains": "仇杀", "answer": "否"}
+    ],
+    "tags": ["心理", "暗黑"]
+  }
+]

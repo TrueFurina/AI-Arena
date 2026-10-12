@@ -1,0 +1,7 @@
+# AI Arena 依赖
+litellm>=1.40
+python-dotenv>=1.0
+flask>=3.0
+pandas>=2.0
+matplotlib>=3.8
+requests>=2.31

@@ -1,0 +1,6 @@
+# AI-Arena 依赖（Python 3.13）
+litellm>=1.40.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
