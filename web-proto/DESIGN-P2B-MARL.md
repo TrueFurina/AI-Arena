@@ -285,21 +285,45 @@ P2-A 的共识/凭证层需要，且降级路径已有测试守护。服务器
 执行方式（实现完成后）：
 
 ```bash
-# 同步代码（仓库已在 GitHub；服务器无外网时用 rsync）
-rsync -az --exclude 'logs/' --exclude 'data/' web-proto/ user@172.16.222.99:~/ai-arena-proto/
-# 跑训练（纯 Python 零依赖，python3 直接跑）
-ssh user@172.16.222.99 "cd ~/ai-arena-proto && python3 train_marl.py \
-    --seeds 0 1 2 3 4 --episodes-host 2000 --episodes-q 4000 \
-    > logs_marl_run.log 2>&1"
+# 同步代码（Git Bash 无 rsync，用 tar over ssh；服务器无外网不走 git）
+cd <repo-root> && tar czf - --exclude='web-proto/logs' --exclude='__pycache__' \
+    web-proto | ssh user@172.16.222.99 \
+    "mkdir -p ~/ai-arena && tar xzf - -C ~/ai-arena"
+# 跑训练（纯 Python 零依赖，python3 直接跑；默认即 5 λ 扫描全配置）
+ssh user@172.16.222.99 "cd ~/ai-arena/web-proto && \
+    python3 train_marl.py --seeds 0 1 2 3 4 > logs/_run.log 2>&1"
 # 取回报告
-scp user@172.16.222.99:~/ai-arena-proto/logs/marl_report.md web-proto/logs/
+scp user@172.16.222.99:~/ai-arena/web-proto/logs/marl_report.md web-proto/logs/
 ```
 
-预计耗时量级：表格 Q、96 状态 × 12 动作，单 seed 分钟级；5 seeds ×
-(H+Q+C) 仍在小时级以内，**不需要** GPU 或分布式。本机只允许跑
-`pytest tests/test_marl_host.py -q` 级轻量单测。
+实测耗时（2026-10-13 首跑）：单 seed ~2.9s，5 seeds × 5 λ 全配置 71.7s，
+**不需要** GPU 或分布式。本机只允许跑 `pytest tests/test_marl_host.py -q`
+级轻量单测。
 
-## 10. 与其它阶段的关系
+## 10. 服务器首跑结果（2026-10-13，§6-A 修订判据下的确认性实验）
+
+配置：5 seeds × λ∈{0, 0.005, 0.01, 0.02, 0.05} × H/Q episodes 2000/4000 ×
+共演 2 轮 × eval repeats 10，held-out 4 题。完整报告
+`logs/marl_report.md`（本地，gitignore）。
+
+| 读数 | 结果 | 解读 |
+|---|---|---|
+| E3 贯通 | ✅ 两种混合对局跑通 | **阶段目标达成** |
+| λ=0.05 恒真 | ✅ 平均谎言数 0.35，3/5 seed 精确为 0 | 发现 2 在完整训练量下成立 |
+| 恒等式存档 | trained 0.1250 = random 0.1250 = 理论值 | 发现 1 在真实运行中成立 |
+| E1' 每谎 F1 伤害 | 多数通过于 λ∈{0, 0.01, 0.02}，但**均值 0.0015~0.0045 与 random 0.0024 同量级、对 λ 非单调**（λ=0.005 均值 −0.0029） | **噪声主导**，「训练主持更狠」不成立；机械多数裁决与效应量矛盾时以效应量为准照实报 |
+| E2 tdhit 增益 | 0~1/5，复问率恒 0.000 | 发现 3 证实（理性不复问） |
+| E2-f1 F1 增益 | λ=0.01 处 4/5 为正（均值 +0.011） | 单 λ 聚集暗示，跨 λ 不稳健，按噪声对待 |
+| 共演轨迹 | 各 λ 稳定（0.750→0.750 型） | 无震荡 |
+| truthful 代价 | tdhit 恒 +0.000 | 对抗训练在诚实主持下零代价 |
+
+**结论**：本环境（表格 Q + 题目无关状态 + 关键词 F1）下欺骗维度的战略
+空间 genuinely 稀薄——主持除 truth=是 翻转更伤的弱不对称外无可学结构，
+提问者唯一反制（冲突丢弃）理性地不值得用。信息量在于：「战略欺骗」要
+成为有意义的学习问题，需要更丰富的环境（LLM 主持措辞多变 / 搪塞轴
+B-1b / 提问者可见状态），而非本设置内加训练量。
+
+## 11. 与其它阶段的关系
 
 - **P2-A（已完成）**：多裁判共识管「结论可信」，本阶段管「对局过程可信」。
   两者共享 `run_episode` 之外的接口，无代码耦合
