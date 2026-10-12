@@ -1,0 +1,131 @@
+{
+  "schema_version": "handoff/1.0",
+  "created_at": "2026-10-13T04:08:00+08:00",
+  "project": "AI-Arena",
+  "workspace": "E:/Program/AI-Arena",
+  "objective": "交接时点：AI-Arena 的 P2-B B-1（L2 真 MARL：可学习欺骗主持 + 对抗自对弈）已实现、服务器首跑、诚实负结果回填、全部推送完毕。项目本身目标不变：LLM vs LLM 社交推理（海龟汤）评测台，web-proto 为唯一主线，结构化日志 + 量化指标横向比较模型能力。",
+  "scope": {
+    "included": [
+      "web-proto/ 唯一主线（L1 对抗 + L2 RL/MARL + L3 链上凭证/共识）",
+      "仓库 git 同步（origin/main，GitHub 公开仓 TrueFurina/AI-Arena）",
+      "实验上服务器纪律的执行与记录"
+    ],
+    "excluded": [
+      "mcp-server/（冻结归档 v0.5，不删不弃不动）",
+      "workspace/（资产库）",
+      "题库扩容至 30+（P2 稳定后再做，有实测依据的降级）",
+      "真实模型横向对比放量（被付费 API 余额阻塞，非技术决策）"
+    ]
+  },
+  "assumptions": [
+    {
+      "assumption": "远程 origin/main 与本地一致（HEAD=8ce921d）",
+      "verified": true,
+      "evidence": "git ls-remote origin main 与 git rev-parse HEAD 逐位一致；git rev-list --count origin/main..HEAD = 0"
+    },
+    {
+      "assumption": "web-proto 全量测试 102/102 通过",
+      "verified": true,
+      "evidence": "ai-arena-proto venv 实跑（上一轮），本轮推送前复跑过；命令见 commands"
+    },
+    {
+      "assumption": "用户下一步方向未定（P2-A 真实裁判标定 / B-1b 搪塞轴 / P3 流水线，或优先转投教改申报与挑战杯）",
+      "verified": false,
+      "evidence": "用户仅说「要转接另一个agent」，未指定 AI-Arena 的下一动作——这是显式 blocker，见 pending_approvals"
+    },
+    {
+      "assumption": "付费 API 余额（智谱/moonshot）是否到账未知",
+      "verified": false,
+      "evidence": "历史阻塞项，未在本轮重新探测；真实 LLM 裁判标定依赖它"
+    }
+  ],
+  "changed_files": [
+    {
+      "path": "（无未提交变更）",
+      "status": "clean",
+      "purpose": "本轮全部成果已提交并推送",
+      "verified": true
+    }
+  ],
+  "raw_diff": {
+    "location": "git log origin/main 历史即审查面；本轮 8 个提交范围 479a7e3..8ce921d",
+    "format": "git",
+    "summary": "P2-B B-1 实现 7 提交 + 结果回填 1 提交（design doc 先行，impl/test 分离，含变异验证记录于提交信息）",
+    "captured": true
+  },
+  "commands": [
+    {
+      "cmd": "git push origin main && git ls-remote origin main",
+      "cwd": "E:/Program/AI-Arena",
+      "exit_code": 0,
+      "output": "479a7e3..8ce921d main -> main；两端哈希一致 8ce921d7d40ed1a6607a67b06a57f813a679ced6"
+    },
+    {
+      "cmd": "web-proto/.venv 测试：\"C:/Users/Lenovo/.workbuddy/binaries/python/envs/ai-arena-proto/Scripts/python.exe\" -m pytest tests/ -q",
+      "cwd": "E:/Program/AI-Arena/web-proto",
+      "exit_code": 0,
+      "output": "102/102 全绿（上一轮推送前实测）"
+    },
+    {
+      "cmd": "服务器实验：tar czf - web-proto | ssh user@172.16.222.99 \"mkdir -p ~/ai-arena && tar xzf - -C ~/ai-arena\"",
+      "cwd": "E:/Program/AI-Arena",
+      "exit_code": 0,
+      "output": "TRANSFER-OK；Git Bash 无 rsync，tar over ssh 是可用传输方式"
+    },
+    {
+      "cmd": "ssh user@172.16.222.99 \"cd ~/ai-arena/web-proto && python3 train_marl.py --seeds 0 1 2 3 4\"",
+      "cwd": "（服务器）",
+      "exit_code": 0,
+      "output": "71.7s 跑完 5 seeds × 5 λ × 2000/4000 episodes；报告 scp 回本机 web-proto/logs/marl_report.md"
+    }
+  ],
+  "failures": [
+    {
+      "category": "实验仪器故障（已修复，非未解决错误）",
+      "observation": "P2-B 预注册 E1 判据（tdhit 每谎伤害）在提问者不复问时是恒等式 1/max_rounds，无法区分任何主持",
+      "impact": "原判据作废；已按 §6-A 修订为 F1 每谎伤害（E1'）并留痕，修订方向由恒等式证明决定",
+      "response": "sanity 阶段抓出→确认性实验前修订→恒等式固化为测试守护。教训：跑之前先用小规模证明判据非恒等"
+    },
+    {
+      "category": "处理惰性（已改为参数扫描）",
+      "observation": "默认 λ=0.05 下主持恒真（收益 2×ΔF1 < λ），欺骗维度不激活",
+      "impact": "默认参数下实验不成立",
+      "response": "λ 改扫描 {0, 0.005, 0.01, 0.02, 0.05}；恒真返回 None 不伪造 0.0"
+    },
+    {
+      "category": "诚实负结果（不是错误，是结论）",
+      "observation": "E1' 效应噪声主导、对 λ 非单调；E2 如预测趋平",
+      "impact": "「训练主持比随机说谎者更狠」不成立",
+      "response": "照实报负结果；结论：本环境战略空间稀薄，方向是环境丰富化（LLM 主持/搪塞轴 B-1b）而非加训练量"
+    }
+  ],
+  "pending_approvals": [
+    {
+      "action": "AI-Arena 下一阶段方向选择",
+      "reason": "用户转接另一个 agent，未指定方向；候选：① 余额到账后真实 LLM 裁判标定（P2-A 唯一剩余项，阻塞于付费 API）② B-1b 搪塞轴（环境丰富化最低成本项）③ P3 一键流水线+前端验签入口；或用户优先处理教改申报/挑战杯，AI-Arena 暂停",
+      "approver": "user",
+      "status": "pending"
+    }
+  ],
+  "stop_reason": "用户主动转接另一个 agent（非故障、非限额、无未完成工作单元）",
+  "next_safe_command": "cd E:/Program/AI-Arena && git log --oneline -3 && git status --short && git ls-remote origin main",
+  "completion_criteria": "交接本身完成 = 本工件存在且字段非空 + 仓库状态可被上述命令独立复现。下一阶段完成标准按其预注册判据（见 web-proto/DESIGN-P2B-MARL.md 与 ROADMAP.md），不得事后改判据。",
+  "environment_facts": {
+    "唯一主线": "web-proto/（2026-10-13 路线决策）；mcp-server/ 冻结归档",
+    "测试_venv": "C:/Users/Lenovo/.workbuddy/binaries/python/envs/ai-arena-proto/Scripts/python.exe（Windows 布局是 Scripts/ 不是 bin/；cryptography==50.0.2）",
+    "服务器纪律": "实验（训练/评测/长任务）一律上服务器 172.16.222.99（SSH user@，ed25519 免密）；本机只做编码/静态检查/轻量单测；>10 分钟必须上服务器。说明书：E:/Program/实验服务器与全局配置.md",
+    "服务器实测": "Python 3.12.3 / 128 核 / 125G；表格 Q 单 seed ~2.9s；Git Bash 无 rsync 用 tar over ssh",
+    "链资产": "E:/Program/MARL/.../marl-ecdsa-consensus-chain（本机可达，judges/identity 测试走真实链路径 consensus_available=True）；P2-B 的 RL 脚本对 chain/judges 零依赖，训练不需要链资产",
+    "阻塞项": "真实 LLM 裁判标定/真实模型横向对比需付费 API（智谱余额不足/moonshot 停用），充值后可跑三家对比",
+    "日志勿删": "web-proto/logs/、mcp-server/data/matches/、workspace/logs/ 是对局数据；logs/ 在 .gitignore，报告属本地可再生产物"
+  },
+  "key_documents": [
+    "E:/Program/AI-Arena/ROADMAP.md（活文档，阶段状态+诚实结论）",
+    "E:/Program/AI-Arena/README.md（根说明+共同约定）",
+    "E:/Program/AI-Arena/web-proto/DESIGN-P2B-MARL.md（P2-B 设计+§6-A 预实验修订+§10 服务器首跑结果）",
+    "E:/Program/AI-Arena/web-proto/logs/marl_report.md（首跑全量矩阵，609 行）",
+    "E:/Program/AI-Arena/.workbuddy/memory/MEMORY.md（长期项目记忆）",
+    "E:/Program/AI-Arena/.workbuddy/memory/2026-10-13.md（当日工作日志，P2-B 全过程）"
+  ],
+  "privacy_note": "本工件不含任何凭据、API key、个人数据；服务器地址为项目既有操作信息（说明书与 README 已记录），非敏感凭证。"
+}
