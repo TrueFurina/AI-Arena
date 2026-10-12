@@ -11,6 +11,8 @@
 - f1     字符级 F1（客观主指标）：不依赖 LLM 裁判，规避裁判自偏好偏差
 - vra    有效提问率：提问以问号结尾或含疑问词的比例
 - yn     主持 yes/no 回答率
+- dhit   去重线索命中率：不同问句中被确认的数量 / 提问总轮数
+- tdhit  真值感知去重命中率（P2-B 欺骗环境主指标，见下）
 
 已知局限（诚实，勿夸大）：
   字符级 F1 只看字符集合、不考虑语序与语义，对长文本还原偏乐观，
@@ -111,6 +113,49 @@ def distinct_hit_rate(transcript: Sequence[dict]) -> float:
     if not n_questions:
         return 0.0
     return sum(1 for a in pairs.values() if is_confirm(a)) / n_questions
+
+
+def tdhit(transcript: Sequence[dict], truth_fn) -> float:
+    """真值感知去重命中率（P2-B 欺骗环境主指标，DESIGN-P2B-MARL.md §3.5）。
+
+    tdhit = 不同问句中答案与如实答案一致的数量 / 提问总轮数
+
+    为什么 dhit 不够：对说谎主持，dhit 可被谎言刷高——主持见「否」
+    即「是」，dhit 照单全收（表观命中照涨），而 F1 被假线索打穿。
+    **用 dhit 评欺骗环境会得出反向结论**。tdhit 只计与如实答案一致的
+    回答，谎言（注入假阳性或漏报真线索）都计不到。
+
+    口径细节（与 distinct_hit_rate 对齐，防重复刷分）：
+    - 同一问句多次出现只取其**首次**答案（setdefault 语义）；
+    - 分母是**提问总轮数**（不是不同问句数），复问稀释得分；
+    - truth_fn(question) 返回 None（问题无法解析）→ 不计入分子，
+      但仍占分母——「收不到可验证信息的轮次」本身就是信息缺失。
+
+    边界：truth_fn 由调用方注入（MARL 层用 category_answer），engine 不
+    耦合语义模块；答案比较为**去空格精确匹配**——当前主持（CategoryHost/
+    DeceptiveHost）只产 是/否。若将来接入措辞多变的 LLM 主持，先定归一化
+    口径并补测试，不得 silently 放宽。刻意**不进** METRIC_KEYS：
+    Evaluator.agg 按固定键聚合历史记录，加键会让旧记录 KeyError。
+    """
+    pairs: Dict[str, str] = {}
+    pending: Optional[str] = None
+    n_questions = 0
+    for m in transcript:
+        role = m.get("role")
+        if role == "question":
+            pending = m.get("content", "")
+            n_questions += 1
+        elif role == "answer" and pending is not None:
+            pairs.setdefault(pending, m.get("content", ""))
+            pending = None
+    if not n_questions:
+        return 0.0
+    hit = 0
+    for q, a in pairs.items():
+        t = truth_fn(q)
+        if t is not None and (a or "").strip() == (t or "").strip():
+            hit += 1
+    return hit / n_questions
 
 
 def metrics_from_result(res: dict) -> dict:

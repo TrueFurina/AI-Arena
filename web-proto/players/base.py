@@ -33,6 +33,14 @@ class Host(ABC):
     def answer(self, puzzle, question: str, transcript: List[dict]) -> str:
         """回答提问者的 yes/no 问题（是 / 否 / 部分是 / 无关 / 不重要）。"""
 
+    def reset(self, puzzle) -> None:
+        """每局开始前由引擎调用（默认 no-op）。
+
+        有每局状态的主持（如 P2-B DeceptiveHost 的谎言配额）覆写本方法。
+        TurtleSoupGame.run 与 players.rl.run_episode 都以 hasattr 守卫
+        调用——第三方主持不继承本 ABC 时也不会炸，行为零变化。
+        """
+
 
 class Judge(ABC):
     @abstractmethod

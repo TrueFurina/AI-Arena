@@ -150,14 +150,18 @@ class CategoryHost(Host):
         super().__init__(id=id, model="lexicon-match")
 
     def answer(self, puzzle: Puzzle, question: str, transcript: List[dict]) -> str:
-        cat = _parse_category(question)
+        cat = parse_category(question)
         if cat is None:
             return "无关"
         return category_answer(puzzle.solution, cat)
 
 
-def _parse_category(question: str) -> "str | None":
-    """从问句里取回类别名（渲染格式见 players/rl.py 的 render_question）。"""
+def parse_category(question: str) -> "str | None":
+    """从问句里取回类别名（渲染格式见 players/rl.py 的 render_question）。
+
+    2026-10-13 公开（原 _parse_category）：P2-B 的 DeceptiveHost 需要同一
+    套「问句→类别」解析来定位真值，口径必须单一，禁止各模块各拷一份。
+    """
     if "「" in question and "」" in question:
         cat = question.split("「", 1)[1].split("」", 1)[0]
         return cat if cat in CATEGORY_LEXICON else None

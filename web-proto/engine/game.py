@@ -110,6 +110,10 @@ class TurtleSoupGame:
     # ---- 主流程 ----
     def run(self) -> GameResult:
         self.started_at = time.time()
+        # 每局状态重置（P2-B）：有每局状态的主持（如谎言配额）在此归零。
+        # hasattr 守卫保证不继承 Host ABC 的第三方主持行为零变化。
+        if hasattr(self.host, "reset"):
+            self.host.reset(self.puzzle)
         self._emit(0, "system", "system", f"【汤面】{self.puzzle.surface}")
 
         for r in range(1, self.max_rounds + 1):
