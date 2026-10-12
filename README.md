@@ -8,7 +8,7 @@ AI vs AI 社交推理游戏评测台（海龟汤起步）：让不同 LLM 在**�
 
 | 目录 | 路线 | 状态 |
 |---|---|---|
-| `web-proto/` | Flask 评测台（端口 8860） | 🔒 **唯一主线**（2026-10-13 定）：L1 多 LLM 对抗 + L2 RL/MARL 策略 + 指标口径单一真值 + held-out 泛化协议；**pytest 37/37 全绿**；题库 12 题 |
+| `web-proto/` | Flask 评测台（端口 8860） | 🔒 **唯一主线**（2026-10-13 定）：L1 多 LLM 对抗 + L2 RL/MARL 策略 + 指标口径单一真值 + held-out 泛化协议 + **L3 链上评测凭证（P1）与多裁判共识/身份锚定（P2-A，74/74 全绿）**；题库 12 题 |
 | `mcp-server/` | MCP 服务器（FastMCP / stdio） | 🧊 **冻结归档**（2026-10-13 定）：v0.5 已完成、pytest 45/45，四性格玩家 / 12 题 / deception / challenge / debate 俱全。**不再新增功能**，其游戏机制概念已被主线吸收 |
 | `workspace/` | 文档 / 技能 / M0–M6 脚手架线 | 📚 设计资产库：12 篇设计文档（`doc/`）+ 4 篇规格（`specs/`）+ 8 个项目技能（`.codebuddy/skills/`）+ tournament/evaluate/report_share 等编排脚本 |
 
@@ -20,7 +20,7 @@ cd web-proto && python run_game.py             # 命令行单局
 cd web-proto && python web_app.py              # Web 界面 :8860
 cd web-proto && python train_rl.py             # 零成本 RL 训练（Mock 环境，不调 API）
 cd web-proto && python eval_generalization.py  # held-out 泛化评测
-cd web-proto && pytest tests/ -q               # 37/37
+cd web-proto && pytest tests/ -q               # 74/74
 
 # 冻结线：MCP 服务器（归档，不再新增功能）
 cd mcp-server && python run.py                 # 启动 MCP 服务器（stdio）
@@ -34,6 +34,7 @@ cd workspace && python run/tournament.py --mock
 
 - API key 只放**各线自己的 `.env`**（`mcp-server/` 暂无 `.env`，复制 `.env.example` 自建）；`.env` 含真实 key，**不进归档、不外传、不进 git**
 - 零 key 优先：mock 模式先跑通再优化；先度量后优化
+- **跑实验（训练/评测/基准/长任务）一律在服务器执行，不在本机跑**：服务器 `172.16.222.99`（SSH user，ed25519 免密）；本机只做编码、静态检查、轻量单测；预计超过 10 分钟的任务一律上服务器。说明书：`E:/Program/实验服务器与全局配置.md`
 - 对局日志即数据，勿删：`mcp-server/data/matches/`（68 局）、`web-proto/logs/`（6 局）、`workspace/logs/`（48 局）
 - 每条线有自己的 `.workbuddy/memory/MEMORY.md` 进展记录，改动大版本后更新
 
@@ -55,7 +56,7 @@ cd workspace && python run/tournament.py --mock
 
 | 决策 | 结论 | 理由 |
 |---|---|---|
-| **主线** | `web-proto/` 为唯一主线 | L1/L2 全部成果（含 37 例测试、指标口径、泛化协议）都在这条线上，继续投入边际成本最低 |
+| **主线** | `web-proto/` 为唯一主线 | L1/L2 全部成果（含 74 例测试、指标口径、泛化协议）都在这条线上，继续投入边际成本最低 |
 | `mcp-server/` | **冻结归档**，不删不弃 | v0.5 完整可用（45/45），其游戏机制已被主线吸收；保留作为可回溯资产，但不再新增功能 |
 | `workspace/` | 保持资产库定位 | 文档与编排脚本，按需取用 |
 | 新工作落点 | 一律在 `web-proto/` | 避免双线维护成本（此前两线并行是明确的待解问题） |
