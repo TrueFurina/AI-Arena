@@ -14,7 +14,7 @@ from players.mock import MockHost
 from players.rl import (
     build_action_bank, RLQuestioner, TabularQPolicy, run_episode,
 )
-from eval_generalization import split_puzzles, evaluate_policy
+from eval_generalization import split_puzzles, evaluate_policy, make_env
 
 MAX_ROUNDS = 8
 
@@ -66,12 +66,13 @@ def test_puzzle_mode_has_zero_generalization_gain():
 
     ⚠️ 语义化动作改造一旦真正带来泛化，本断言应失败——届时请更新。
     """
-    puzzles, bank, info = _full_bank()
+    puzzles = load_puzzles()
+    env = make_env("puzzle", puzzles)
+    bank, _info, host, _ = env
     train, held = split_puzzles(puzzles, 6, seed=0)
-    host = MockHost()
 
     policy = TabularQPolicy(len(bank), seed=0)
-    q = RLQuestioner(policy=policy, action_bank=bank, informative=info,
+    q = RLQuestioner(policy=policy, action_bank=bank, informative=_info,
                      explore=True, use_puzzle_state=True)
     # 800 局/题：与 eval_generalization.py 默认一致。400 局/题时训练题命中率
     # 仅 0.188（欠拟合），会让「训练题 vs 新题落差」断言因训练不足而误判。
@@ -79,21 +80,21 @@ def test_puzzle_mode_has_zero_generalization_gain():
         run_episode(train[ep % len(train)], host, q, max_rounds=MAX_ROUNDS,
                     train=True)
 
-    _, trained_hit, _ = evaluate_policy(held, bank, info, policy, "puzzle",
-                                        repeats=5, max_rounds=MAX_ROUNDS)
+    _, _, trained_hit, _ = evaluate_policy(held, env, policy,
+                                           repeats=5, max_rounds=MAX_ROUNDS)
     baseline = TabularQPolicy(len(bank), seed=0)
-    _, base_hit, _ = evaluate_policy(held, bank, info, baseline, "puzzle",
-                                     repeats=5, max_rounds=MAX_ROUNDS)
+    _, _, base_hit, _ = evaluate_policy(held, env, baseline,
+                                        repeats=5, max_rounds=MAX_ROUNDS)
     assert abs(trained_hit - base_hit) < 1e-9, (
-        f"新题命中率 {trained_hit:.4f} 与未训练基线 {base_hit:.4f} 不同 → "
+        f"新题去重命中率 {trained_hit:.4f} 与未训练基线 {base_hit:.4f} 不同 → "
         "题目条件模式出现了非预期的泛化（若属实，请更新本局限描述）"
     )
     # 第二条判据（有辨别力）：上面那条近乎「结构性恒真」——只要新题状态键
     # 未被训练过就必然成立，无法反映训练是否真的有效。故补充落差断言：
     # 训练题与新题必须存在显著落差。若将来真实现了泛化，落差会收窄，
     # 本断言会失败并提醒更新，而不是让一条恒真断言一直假装通过。
-    _, train_hit, _ = evaluate_policy(train, bank, info, policy, "puzzle",
-                                      repeats=5, max_rounds=MAX_ROUNDS)
+    _, _, train_hit, _ = evaluate_policy(train, env, policy,
+                                         repeats=5, max_rounds=MAX_ROUNDS)
     assert train_hit - trained_hit > 0.15, (
         f"训练题命中率 {train_hit:.3f} 与新题 {trained_hit:.3f} 落差仅 "
         f"{train_hit - trained_hit:+.3f} → 要么训练无效，要么已具备泛化，"
@@ -107,9 +108,10 @@ def test_global_mode_train_performance_is_weak():
     实测训练题命中率随训练题数增加反而下降（0.125 → 0.042 → 0.014），
     这与理论一致：训练题越多，跨题平均越均匀，Q 差异越小 → 趋近随机。
     """
-    puzzles, bank, info = _full_bank()
+    puzzles = load_puzzles()
+    env = make_env("global", puzzles)
+    bank, info, host, _ = env
     train, _held = split_puzzles(puzzles, 6, seed=0)
-    host = MockHost()
 
     policy = TabularQPolicy(len(bank), seed=0)
     q = RLQuestioner(policy=policy, action_bank=bank, informative=info,
@@ -117,8 +119,8 @@ def test_global_mode_train_performance_is_weak():
     for ep in range(400 * len(train)):
         run_episode(train[ep % len(train)], host, q, max_rounds=MAX_ROUNDS,
                     train=True)
-    _, hit, _ = evaluate_policy(train, bank, info, policy, "global", repeats=5,
-                                max_rounds=MAX_ROUNDS)
+    _, _, hit, _ = evaluate_policy(train, env, policy, repeats=5,
+                                   max_rounds=MAX_ROUNDS)
     # 只守上限：题目无关模式在当前动作抽象下不可能很强
     assert hit < 0.40, (
         f"题目无关模式训练题命中率 {hit:.3f} 偏高 → 若属实说明已具备泛化，请更新"

@@ -95,7 +95,7 @@ def _rec(f1):
     Evaluator.agg() 走严格契约（缺字段直接 KeyError，不做静默补 0）——
     把缺失指标当 0 平均会让均值静默失真，比报错危险得多。
     """
-    return {"vra": 1.0, "yn_rate": 1.0, "f1": f1, "hit_rate": 1.0,
+    return {"vra": 1.0, "yn_rate": 1.0, "f1": f1, "hit_rate": 1.0, "dhit": 1.0,
             "valid_q": 1, "total_q": 1}
 
 

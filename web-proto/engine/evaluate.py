@@ -18,14 +18,14 @@
 """
 from __future__ import annotations
 
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 QUEST_WORDS = ("吗", "呢", "为何", "为什么", "怎么", "是否", "是不是", "是谁",
                "什么", "哪里", "哪", "多少", "几")
 YN_TOKENS = ("是", "否", "对", "不对", "正确", "错误", "yes", "no", "Yes", "No", "YES", "NO")
 CONFIRM_ANSWERS = ("是", "对", "正确", "是的", "没错", "yes")
 
-METRIC_KEYS = ("vra", "yn_rate", "f1", "hit_rate")
+METRIC_KEYS = ("vra", "yn_rate", "f1", "hit_rate", "dhit")
 
 
 def char_f1(a: str, b: str) -> float:
@@ -82,6 +82,37 @@ def hit_rate(answers: Sequence[str]) -> float:
     return sum(1 for a in answers if is_confirm(a)) / len(answers)
 
 
+def distinct_hit_rate(transcript: Sequence[dict]) -> float:
+    """去重线索命中率 = 不同问句中被确认的数量 / **提问总轮数**。
+
+    为什么需要它（语义化动作引入后必须补）：
+      hit_rate 完全不惩罚重复提问。关键词动作用时问题不大——同一关键词在
+      新题上通常答「无关」，重复问拿不到分。但**语义类别是跨题共享**的：
+      某类别在这题上答「是」，重复问 8 次就拿满 hit_rate=1.0，指标被刷爆。
+
+    ⚠️ 分母必须是**提问总轮数**，不能是「不同问句数」——我第一版就是按
+    不同问句数做分母，结果重复提问既不增分子也不增分母，重复问一个命中
+    的问题照样得 1.0，等于没堵住漏洞。分母取总轮数后：
+        重复问同一个命中问题 8 次  → 1/8 = 0.125（只探到 1 条线索）
+        问 8 个不同问题命中 5 条   → 5/8 = 0.625
+    这才符合「收集到的信息量」的直觉。
+    """
+    pairs: Dict[str, str] = {}
+    pending: Optional[str] = None
+    n_questions = 0
+    for m in transcript:
+        role = m.get("role")
+        if role == "question":
+            pending = m.get("content", "")
+            n_questions += 1
+        elif role == "answer" and pending is not None:
+            pairs.setdefault(pending, m.get("content", ""))
+            pending = None
+    if not n_questions:
+        return 0.0
+    return sum(1 for a in pairs.values() if is_confirm(a)) / n_questions
+
+
 def metrics_from_result(res: dict) -> dict:
     """从 GameResult dict 提取指标（提问 / 主持 / 还原 分离）。
 
@@ -100,6 +131,7 @@ def metrics_from_result(res: dict) -> dict:
         "vra": vq / max(1, len(qs)),
         "yn_rate": yn_rate(ans),
         "hit_rate": hit_rate(ans),
+        "dhit": distinct_hit_rate(tr),
         "f1": char_f1(guess, solution),
         "guess": guess[:200],
     }
