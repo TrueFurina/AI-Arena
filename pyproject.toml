@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "AI 角斗场 —— 基于海龟汤的 AI-vs-AI 社交推理评测系统（MCP 服务器）"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.2.0",
+    # mcp 2.x 将 FastMCP 改名为 MCPServer 且 API 不兼容；本项目按 v1 编写并验证（沙箱 45/45、本机 45/45 均为 mcp 1.28.1）
+    "mcp>=1.2.0,<2",
     "pydantic>=2.0",
     "python-dotenv>=1.0",
     "pandas>=2.0",
@@ -13,7 +14,8 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["litellm>=1.40.0"]
-dev = ["pytest>=8.0", "fastmcp>=2.0"]
+# fastmcp 4.x 依赖 mcp 2.x，仅作测试客户端用；3.4.4 为经验证版本
+dev = ["pytest>=8.0", "fastmcp>=3.4,<4"]
 
 [project.scripts]
 arena-mcp = "mcp_server.server:main"

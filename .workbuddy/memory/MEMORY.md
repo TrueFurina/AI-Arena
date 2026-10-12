@@ -232,6 +232,7 @@ creative 命中率最高却赢不多，典型的"看得准但慢一步"。
 ## 环境备注
 - 沙箱 Python 3.11，`pip install -e .` 装 `mcp` 1.28.1 + pandas/matplotlib；`fastmcp` 3.4.4 作为测试客户端（dev 依赖）。
 - `tests/test_server.py` 用 `fastmcp.Client(srv.mcp)` 内存模式验证 MCP 层，规避 stdio 手动解析的版本差异。
+- **2026-10-12 本机（Windows + Python 3.13）复跑验证 45/45 全绿**：组合 mcp==1.28.1 + fastmcp==3.4.4 + pandas 3.0.6 + matplotlib 3.11.2 + pytest 9.1.1。踩坑：`mcp>=1.2.0` 无上界时 pip 会装到 mcp 2.x（FastMCP→MCPServer 改名，import 直接失败），已在 pyproject 固定 `mcp<2` / `fastmcp<4`。本机 venv：`~/.workbuddy/binaries/python/envs/ai-arena`；安装走阿里云源（当时清华源取不到 setuptools）。
 
 ## 落盘 / 分发记录（2026-10-12 · v0.5 更新）
 
