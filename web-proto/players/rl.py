@@ -1,10 +1,12 @@
 """L2 执行层 · 强化学习提问策略（零成本可训练，接口预留 MARL 扩展）。
 
 诚实定位（重要，勿夸大）：
-  当前实现是**单智能体 RL**——只学习提问者侧的「动作选择」策略。
-  对局环境本身是多智能体（主持 + 提问者），但主持当前是固定策略（Mock），
-  不参与学习。完整 MARL（提问者与主持联合训练 / 自对弈对抗欺骗）为后续
-  扩展；本模块 Policy 接口（select_action / update）已按可直接扩展设计。
+  本模块同时承载**提问者侧 RL** 与 **MARL 主持训练的回路**（2026-10-13，
+  P2-B B-1）：run_episode(train_host=True) 以零和镜像奖励同步训练主持侧
+  策略（players/host_rl.py 的 DeceptiveHost），训练/评估共用同一循环。
+  双方都是表格 Q 学习、无函数逼近——**不宣称 MARL 算法新颖性**，阶段目标
+  是「评测台能评测 MARL agent」（见 DESIGN-P2B-MARL.md §1）。
+  默认参数（train_host=False）下行为与单智能体时代逐位一致，有测试守护。
 
 为什么动作空间必须是离散的：
   文本提问的动作空间无限，直接对文本做 RL 不可行。这里把「提问」抽象为
@@ -278,7 +280,7 @@ class RLQuestioner(Player):
         return render_question(self.bank[action])
 
     def final_guess(self, puzzle: Puzzle, transcript: List[dict]) -> str:
-        """终局还原：只采纳被主持**确认**的线索，拼成紧凑陈述。
+        """终局还原：采纳被主持确认且**答案一贯**的线索，拼成紧凑陈述。
 
         早期版本把「问句原文 + 答案 + 模板废话」整段拼进去，而模板字
         （「RL 策略还原」「根据问答」「→」等）几乎不出现在汤底里，
@@ -293,42 +295,90 @@ class RLQuestioner(Player):
             做不到，硬凑等于编造证据。
         因此 F1 上限受「关键词式短还原 vs 长汤底」的字符集合性质限制，
         实测 oracle（问中所有有效线索）约 0.3~0.4，见 tests/test_rl.py。
+
+        P2-B 新增（DESIGN-P2B-MARL.md §3.4 冲突感知还原）：
+          同一类别先后答案冲突（先是后否 / 先否后是）→ 该类别**整体丢弃**。
+          这是提问者侧唯一的抓谎机制：复问同一类别，答案翻转即暴露。
+          **向后兼容可证明**：诚实主持对同一类别永远同答，冲突不存在，
+          该规则是恒等变换——现有全部基线数字不变（tests/test_marl_host.py
+          固化为断言，含跨种子集成验证）。
+        代价：复问 −0.5 且烧一轮，「花几轮验证 vs 多问一个新类别」成为
+        提问者的真权衡（预注册失败模式②即观察这个权衡是否买贵了）。
         """
-        confirmed: List[str] = []
-        seen: Set[str] = set()
+        answers_by_kw: Dict[str, List[str]] = {}
+        order: List[str] = []
         pending: Optional[str] = None
         for m in transcript:
             role = m.get("role")
             if role == "question":
                 pending = m.get("content", "")
             elif role == "answer" and pending is not None:
-                if is_confirm(m.get("content", "")):
-                    kw = parse_question_keyword(pending)
-                    if kw and kw not in seen:
-                        seen.add(kw)
-                        confirmed.append(kw)
+                kw = parse_question_keyword(pending)
+                if kw:
+                    if kw not in answers_by_kw:
+                        answers_by_kw[kw] = []
+                        order.append(kw)
+                    answers_by_kw[kw].append(m.get("content", ""))
                 pending = None
+        # 一贯确认才采纳：全部回答均为确认 → 无冲突（诚实主持下恒成立）；
+        # 出现确认与否定的冲突 → 该类别整体丢弃（抓谎）
+        confirmed: List[str] = [
+            kw for kw in order
+            if all(is_confirm(a) for a in answers_by_kw[kw])
+        ]
         if not confirmed:
             return "现有线索不足以还原真相。"
         return "真相与以下要素有关：" + "，".join(confirmed) + "。"
 
 
-def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
-                max_rounds: int = 8, train: bool = True) -> dict:
-    """跑一局（RL 回路），返回 {reward, f1, transcript}。
+LIE_COST_DEFAULT = 0.05
 
-    train=True 时做 Q 更新。训练与评估共用本函数，避免两套循环实现漂移。
+# train_host=True 要求主持暴露的字段（DeceptiveHost 即如此）。缺字段则
+# loud fail——静默跳过主持训练比报错危险（项目既有教训：静默 fallback）。
+_HOST_TRAIN_INTERFACE = ("policy", "last_state", "last_action", "last_lied")
+
+
+def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
+                max_rounds: int = 8, train: bool = True,
+                train_host: bool = False,
+                lie_cost: float = LIE_COST_DEFAULT) -> dict:
+    """跑一局（RL 回路），返回 {reward, f1, transcript, guess}。
+
+    train=True 时做提问者 Q 更新。训练与评估共用本函数，避免两套循环实现漂移。
     提问走 questioner.ask_question（而非直接调 policy），确保 Player 接口
     与真实引擎 TurtleSoupGame 的行为完全一致。
 
     max_rounds 默认 8：默认 4 时即便每轮都问中有效线索，还原句也只有
     ~9 个去重字符，对 30~70 字的汤底召回率约 0.1，F1 被指标本身压死，
     看不出策略差异。
+
+    train_host=True（P2-B MARL，见 DESIGN-P2B-MARL.md §3.3/§4）：同步训练
+    主持侧策略，零和镜像——主持每步奖励 = −提问者当步奖励 − λ·[lie]，
+    终局奖励 = −2×F1。要求 host 暴露 policy/last_state/last_action/last_lied
+    （DeceptiveHost），否则 ValueError。该参数默认 False，且返回 dict 只在
+    开启时**追加** host_reward/n_lies 两个键——默认路径的键集合与数值
+    逐位不变（tests/test_marl_host.py 固化守护）。
+
+    每局开头调用 host.reset(puzzle)（hasattr 守卫）：DeceptiveHost 的
+    谎言配额等每局状态在此归零；无 reset 的主持行为零变化。
     """
+    if hasattr(host, "reset"):
+        host.reset(puzzle)
+    if train_host:
+        missing = [a for a in _HOST_TRAIN_INTERFACE if not hasattr(host, a)]
+        if missing:
+            raise ValueError(
+                f"train_host=True 需要主持暴露 {missing}（DeceptiveHost）；"
+                "拒绝静默跳过主持训练"
+            )
+
     transcript: List[dict] = []
     asked: List[int] = []
     total = 0.0
     traj: List[Tuple[str, int, float]] = []
+    host_traj: List[Tuple[str, int, float]] = []
+    host_total = 0.0
+    n_lies = 0
 
     for r in range(1, max_rounds + 1):
         question = questioner.ask_question(puzzle, transcript)
@@ -347,6 +397,18 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
         traj.append((state, action, rew))
         total += rew
 
+        if train_host:
+            h_state = host.last_state
+            h_action = host.last_action
+            if h_state is None or h_action is None:
+                continue  # 本轮主持无决策（问题无法解析），不进主持轨迹
+            h_lied = bool(host.last_lied)
+            h_rew = -rew - (lie_cost if h_lied else 0.0)
+            host_traj.append((h_state, h_action, h_rew))
+            host_total += h_rew
+            if h_lied:
+                n_lies += 1
+
     guess = questioner.final_guess(puzzle, transcript)
     transcript.append({"round": max_rounds + 1, "speaker": questioner.id,
                        "role": "guess", "content": guess})
@@ -364,4 +426,16 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
             G = rew + questioner.policy.gamma * G
             questioner.policy.update(state, action, G, "|", done=True)
 
-    return {"reward": total, "f1": f1, "transcript": transcript, "guess": guess}
+    if train_host:
+        # 主持侧同一套 MC 回传；终局镜像奖励 = −2×F1（零和）
+        G = -term
+        for (state, action, rew) in reversed(host_traj):
+            G = rew + host.policy.gamma * G
+            host.policy.update(state, action, G, "|", done=True)
+        host_total += -term
+
+    out = {"reward": total, "f1": f1, "transcript": transcript, "guess": guess}
+    if train_host:
+        out["host_reward"] = host_total
+        out["n_lies"] = n_lies
+    return out
