@@ -5,6 +5,7 @@ from typing import List
 
 from .base import Player, Host, Judge
 from engine.game import Puzzle
+from engine.evaluate import char_f1 as _char_f1  # 口径唯一真值，禁止本地再实现一份
 
 # 通用问题池（覆盖常见推理方向），mock 提问者从中轮流取用
 _QUESTION_BANK = [
@@ -51,19 +52,6 @@ class MockHost(Host):
             if qa.get("contains") and qa["contains"] in question:
                 return qa["answer"]
         return "无关"
-
-
-def _char_f1(a: str, b: str) -> float:
-    """字符级 F1，作为无嵌入时的粗略相似度。"""
-    sa, sb = set(a), set(b)
-    if not sa or not sb:
-        return 0.0
-    inter = sa & sb
-    if not inter:
-        return 0.0
-    prec = len(inter) / len(sa)
-    rec = len(inter) / len(sb)
-    return 2 * prec * rec / (prec + rec)
 
 
 class MockJudge(Judge):

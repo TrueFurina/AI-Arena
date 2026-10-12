@@ -23,6 +23,8 @@ mcp-server/data/matches/
 mcp-server/reports/
 web-proto/logs/
 web-proto/analysis/
+# RL 训练产物（train_rl.py 0.1s 可再生，不入库）
+web-proto/data/
 workspace/logs/
 workspace/analysis/
 *.png

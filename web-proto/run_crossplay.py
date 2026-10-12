@@ -73,57 +73,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-QUEST_WORDS = ("吗", "呢", "为何", "为什么", "怎么", "是否", "是不是", "是谁",
-               "什么", "哪里", "哪", "多少", "几")
-YN_TOKENS = ("是", "否", "对", "不对", "正确", "错误", "yes", "no", "Yes", "No", "YES", "NO")
+# 指标口径统一走 engine/evaluate.py（全项目唯一真值）：
+# 本文件 / players/mock.py 此前各有一份实现，任一份单独改动都会让历史结论
+# （DD=0.53、GG=0.29）与新数字打架。要改口径请动 evaluate.py，
+# 并同步 tests/test_evaluate.py 的历史锁定值。
+from engine.evaluate import (
+    char_f1 as _char_f1,
+    is_valid_question as _valid_q,
+    yn_rate as _yn_rate,
+    metrics_from_result,
+)
 
 DEEPSEEK = "deepseek/deepseek-chat"
 GLM = "zai/glm-4-flash"
 MODEL_SHORT = {DEEPSEEK: "deepseek", GLM: "glm-4-flash"}
-
-
-def _char_f1(a: str, b: str) -> float:
-    sa, sb = set(a), set(b)
-    if not sa or not sb:
-        return 0.0
-    inter = sa & sb
-    if not inter:
-        return 0.0
-    prec = len(inter) / len(sa)
-    rec = len(inter) / len(sb)
-    return 2 * prec * rec / (prec + rec)
-
-
-def _valid_q(q: str) -> bool:
-    q = q.strip()
-    if q.endswith(("?", "？")):
-        return True
-    return any(w in q for w in QUEST_WORDS)
-
-
-def _yn_rate(answers) -> float:
-    if not answers:
-        return 0.0
-    hit = sum(1 for m in answers if any(t in m for t in YN_TOKENS))
-    return hit / len(answers)
-
-
-def metrics_from_result(res: dict) -> dict:
-    """从 GameResult dict 提取指标（提问/主持/还原 分离）。"""
-    tr = res["transcript"]
-    qs = [m["content"] for m in tr if m["role"] == "question"]
-    ans = [m["content"] for m in tr if m["role"] == "answer"]
-    guess = next((m["content"] for m in tr if m["role"] == "guess"), "")
-    solution = res["puzzle"].get("solution", "")
-    vq = sum(1 for x in qs if _valid_q(x))
-    return {
-        "valid_q": vq,
-        "total_q": len(qs),
-        "vra": vq / max(1, len(qs)),
-        "yn_rate": _yn_rate(ans),
-        "f1": _char_f1(guess, solution),
-        "guess": guess[:200],
-    }
 
 
 def run_cell(q_model: str, h_model: str, pid: str) -> dict:
