@@ -23,8 +23,9 @@ from typing import Dict, List, Sequence
 QUEST_WORDS = ("吗", "呢", "为何", "为什么", "怎么", "是否", "是不是", "是谁",
                "什么", "哪里", "哪", "多少", "几")
 YN_TOKENS = ("是", "否", "对", "不对", "正确", "错误", "yes", "no", "Yes", "No", "YES", "NO")
+CONFIRM_ANSWERS = ("是", "对", "正确", "是的", "没错", "yes")
 
-METRIC_KEYS = ("vra", "yn_rate", "f1")
+METRIC_KEYS = ("vra", "yn_rate", "f1", "hit_rate")
 
 
 def char_f1(a: str, b: str) -> float:
@@ -58,6 +59,29 @@ def yn_rate(answers: Sequence[str]) -> float:
     return hit / len(answers)
 
 
+def is_confirm(answer: str) -> bool:
+    """主持回答是否构成「确认」（口径唯一真值，rl.py 亦从此处导入）。
+
+    单独收敛的理由：终局还原只采纳被确认的线索，而 RL 奖励同样依赖该
+    判定。若两处各有一份，判定漂移会让「F1 通路」的结论悄悄失效。
+    """
+    a = (answer or "").strip()
+    return a in CONFIRM_ANSWERS or a.startswith("是")
+
+
+def hit_rate(answers: Sequence[str]) -> float:
+    """线索命中率：回答被确认为「是」的比例。
+
+    为什么在 F1 之外还要这个指标：F1 会被汤底措辞稀释——提问者问中了
+    「身高」，主持答「是」，但汤底写的是「个子矮」，字符不重合，F1 不涨。
+    hit_rate 不受措辞影响，是**提问质量**的直接度量；F1 是**还原质量**
+    的度量。两者要分开报，混用会得出「提问没进步」的错误结论。
+    """
+    if not answers:
+        return 0.0
+    return sum(1 for a in answers if is_confirm(a)) / len(answers)
+
+
 def metrics_from_result(res: dict) -> dict:
     """从 GameResult dict 提取指标（提问 / 主持 / 还原 分离）。
 
@@ -75,6 +99,7 @@ def metrics_from_result(res: dict) -> dict:
         "total_q": len(qs),
         "vra": vq / max(1, len(qs)),
         "yn_rate": yn_rate(ans),
+        "hit_rate": hit_rate(ans),
         "f1": char_f1(guess, solution),
         "guess": guess[:200],
     }

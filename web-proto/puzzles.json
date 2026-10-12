@@ -24,7 +24,7 @@
     "solution": "他和几个人乘坐热气球横穿沙漠，途中热气球超重，必须减轻重量。他们先扔下行李，仍不够，于是决定抽签，抽到半根火柴（被折断的那根）的人跳下去。他抽到了，于是跳下摔死。",
     "golden_qa": [
       {"contains": "热气球", "answer": "是"},
-      {"contains": "沙漠", "answer": "是"},
+      {"contains": "横穿", "answer": "是"},
       {"contains": "抽签", "answer": "是"},
       {"contains": "超重", "answer": "是"},
       {"contains": "跳", "answer": "是"},
@@ -52,5 +52,167 @@
       {"contains": "仇杀", "answer": "否"}
     ],
     "tags": ["心理", "暗黑"]
+  },
+  {
+    "soup_id": "turtle_soup_004",
+    "title": "一杯水",
+    "surface": "一个男人走进酒吧，向酒保要一杯水。酒保突然掏出枪指着他，男人愣了一下，说了声『谢谢』便离开了。",
+    "solution": "男人一直在打嗝，他要水是为了止住打嗝。酒保看出了这一点，于是用枪吓他一跳——受到惊吓后打嗝停了，男人回过神来，说了谢谢就走了。",
+    "golden_qa": [
+      {"contains": "打嗝", "answer": "是"},
+      {"contains": "水", "answer": "是"},
+      {"contains": "惊吓", "answer": "是"},
+      {"contains": "酒保", "answer": "是"},
+      {"contains": "枪", "answer": "是"},
+      {"contains": "口渴", "answer": "否"},
+      {"contains": "抢劫", "answer": "否"},
+      {"contains": "谋杀", "answer": "否"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "幽默"]
+  },
+  {
+    "soup_id": "turtle_soup_005",
+    "title": "未打开的包裹",
+    "surface": "一个男人死在沙漠里，身边躺着一个没有打开的包裹，他身上没有任何外伤。",
+    "solution": "他和同伴乘坐飞机飞越沙漠时飞机发生故障，被迫跳伞。那个包裹就是降落伞，但他的降落伞没能打开，他因此摔死。",
+    "golden_qa": [
+      {"contains": "飞机", "answer": "是"},
+      {"contains": "跳伞", "answer": "是"},
+      {"contains": "降落伞", "answer": "是"},
+      {"contains": "沙漠", "answer": "是"},
+      {"contains": "包裹", "answer": "是"},
+      {"contains": "摔死", "answer": "是"},
+      {"contains": "渴死", "answer": "否"},
+      {"contains": "谋杀", "answer": "否"},
+      {"contains": "水", "answer": "无关"}
+    ],
+    "tags": ["经典", "推理"]
+  },
+  {
+    "soup_id": "turtle_soup_006",
+    "title": "两杯冰茶",
+    "surface": "两个人在餐厅喝同一种冰茶，杯中被下了同样的毒药。喝得快的人活了下来，喝得慢的人死了。",
+    "solution": "两杯冰茶都被下毒，毒药冻在冰块里。喝得快的人在冰块融化之前就喝完了那杯冰茶，没有摄入毒药；喝得慢的人等到冰块融化，毒药渗进茶里，因此中毒身亡。这不是谋杀，差别只在两人喝的快慢。",
+    "golden_qa": [
+      {"contains": "冰块", "answer": "是"},
+      {"contains": "毒药", "answer": "是"},
+      {"contains": "融化", "answer": "是"},
+      {"contains": "冰茶", "answer": "是"},
+      {"contains": "下毒", "answer": "是"},
+      {"contains": "快慢", "answer": "是"},
+      {"contains": "杯子", "answer": "否"},
+      {"contains": "谋杀", "answer": "是"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "物理"]
+  },
+  {
+    "soup_id": "turtle_soup_007",
+    "title": "七楼与十楼",
+    "surface": "一个矮个子男人住在十楼。晴天他只按七楼，然后走楼梯上去；雨天他却能直接按十楼。",
+    "solution": "他身高很矮，在电梯里够不到十楼的按钮，只能够到七楼，晴天只能爬楼梯上去。雨天他带着雨伞，可以用伞尖按到十楼的按钮，所以能直达十楼。",
+    "golden_qa": [
+      {"contains": "雨伞", "answer": "是"},
+      {"contains": "身高", "answer": "是"},
+      {"contains": "按钮", "answer": "是"},
+      {"contains": "雨天", "answer": "是"},
+      {"contains": "十楼", "answer": "是"},
+      {"contains": "楼梯", "answer": "是"},
+      {"contains": "生病", "answer": "否"},
+      {"contains": "有钱", "answer": "无关"},
+      {"contains": "电梯", "answer": "是"}
+    ],
+    "tags": ["经典", "生活"]
+  },
+  {
+    "soup_id": "turtle_soup_008",
+    "title": "镜子",
+    "surface": "一个男人走进一间屋子，看到镜子之后立刻尖叫着逃了出去。",
+    "solution": "他是一只走进屋子里照镜子的吸血鬼，镜子里照不出他的倒影。他看到镜中空无一物，害怕得尖叫着逃了出去。",
+    "golden_qa": [
+      {"contains": "镜子", "answer": "是"},
+      {"contains": "吸血鬼", "answer": "是"},
+      {"contains": "倒影", "answer": "是"},
+      {"contains": "尖叫", "answer": "是"},
+      {"contains": "害怕", "answer": "是"},
+      {"contains": "屋子", "answer": "是"},
+      {"contains": "杀人", "answer": "否"},
+      {"contains": "鬼魂", "answer": "否"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "奇幻"]
+  },
+  {
+    "soup_id": "turtle_soup_009",
+    "title": "一滩水渍",
+    "surface": "一个女人被发现死在从内部反锁的房间里，身边只有一滩水渍，现场找不到任何凶器。",
+    "solution": "凶手用冰柱刺杀了她，凶器随后消融成一滩水，密室内看似没有凶器，成了不可能犯罪的现场。",
+    "golden_qa": [
+      {"contains": "冰柱", "answer": "是"},
+      {"contains": "消融", "answer": "是"},
+      {"contains": "水渍", "answer": "是"},
+      {"contains": "密室", "answer": "是"},
+      {"contains": "凶器", "answer": "是"},
+      {"contains": "刺杀", "answer": "是"},
+      {"contains": "毒物", "answer": "否"},
+      {"contains": "自杀", "answer": "否"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "密室"]
+  },
+  {
+    "soup_id": "turtle_soup_010",
+    "title": "跳窗的人",
+    "surface": "一个男人从十层高的窗户跳了出去，却毫发无伤地站了起来。",
+    "solution": "他是往房间里跳的——他在十层高的窗外擦窗户，站在窗台上脚下一滑，本能地跳进屋内，所以毫发无伤。",
+    "golden_qa": [
+      {"contains": "擦窗", "answer": "是"},
+      {"contains": "跳进", "answer": "是"},
+      {"contains": "窗户", "answer": "是"},
+      {"contains": "窗台", "answer": "是"},
+      {"contains": "毫发无伤", "answer": "是"},
+      {"contains": "十层", "answer": "是"},
+      {"contains": "自杀", "answer": "否"},
+      {"contains": "超人", "answer": "否"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "文字游戏"]
+  },
+  {
+    "soup_id": "turtle_soup_011",
+    "title": "锁着的车",
+    "surface": "一个男人死在车里，车门从内部锁上，车窗紧闭，引擎还在运转，油箱是满的。",
+    "solution": "他把车停在密闭的车库里并一直开着引擎，废气在车库内积聚，他因一氧化碳窒息身亡，车看起来是从内锁上的。",
+    "golden_qa": [
+      {"contains": "一氧化碳", "answer": "是"},
+      {"contains": "废气", "answer": "是"},
+      {"contains": "引擎", "answer": "是"},
+      {"contains": "车库", "answer": "是"},
+      {"contains": "窒息", "answer": "是"},
+      {"contains": "车窗", "answer": "是"},
+      {"contains": "谋杀", "answer": "否"},
+      {"contains": "钥匙", "answer": "无关"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "物理"]
+  },
+  {
+    "soup_id": "turtle_soup_012",
+    "title": "学舌的鹦鹉",
+    "surface": "一个男人买了一只鹦鹉回家，鹦鹉反复说着同一句话，男人听后脸色惨白，当场杀死了它。",
+    "solution": "鹦鹉重复的是妻子与情人私会时说过的话——它学舌暴露了妻子出轨的真相，男人因此得知实情。",
+    "golden_qa": [
+      {"contains": "鹦鹉", "answer": "是"},
+      {"contains": "妻子", "answer": "是"},
+      {"contains": "出轨", "answer": "是"},
+      {"contains": "学舌", "answer": "是"},
+      {"contains": "真相", "answer": "是"},
+      {"contains": "情人", "answer": "是"},
+      {"contains": "报警", "answer": "否"},
+      {"contains": "自杀", "answer": "否"},
+      {"contains": "钱", "answer": "无关"}
+    ],
+    "tags": ["经典", "心理"]
   }
 ]

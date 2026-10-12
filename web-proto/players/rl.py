@@ -45,6 +45,34 @@
      eps×局数 5 组配置 + 每局随机抽题打散相位耦合，12 组中 8 组失败、
      排序随种子乱跳。根因即上述 POMDP 表示缺陷，非样本量问题。
      修正状态表示后已可学（见 tests/test_rl.py），但代价是退化为按题记忆。
+
+────────────────────────────────────────────────────────────────────────────────
+泛化能力实测（2026-10-12，held-out 协议，题库 12 题 / 动作库 92）
+────────────────────────────────────────────────────────────────────────────────
+  ⚠️ **结论是负的，且必须照实陈述**：本策略**不具备泛化能力**。
+
+  puzzle（题目条件）模式，训练题数 3 / 6 / 9：
+    训练题线索命中率 0.500 / 0.604 / 0.417
+    新题线索命中率   0.111 / 0.167 / 0.333  ← 与未训练基线**逐位相同**
+    真泛化增益       +0.000 / +0.000 / +0.000
+  数学上是必然的：新题的状态键（soup_id|...）从未被训练过 → Q 全零 →
+  行为退化为未训练策略。增益精确为 0，不是「接近 0」。
+
+  ⚠️ 若不设未训练基线，会得出**假泛化**的错误结论：新题上策略一直问
+  bank[0]（题库第一个关键词「海难」），而题001 恰好「海难=是」，
+  于是新题命中率达 0.333，看起来「泛化得还行」。基线对照把它扣掉了。
+
+  global（题目无关）模式：真泛化增益 **为负**（−0.056 / −0.042 / −0.125），
+  且训练题命中率随训练题数增加反而下降（0.125 → 0.042 → 0.014）——
+  与理论一致：训练题越多，跨题平均越均匀，Q 差异越小 → 趋近随机。
+
+  样本阶梯 3→6→9：泛化增益**不随训练题增多而改善** → 这不是数据量问题，
+  而是**动作抽象本身**的问题：动作是题目绑定的关键词，新题的关键词必然
+  不同，没有任何迁移路径。唯一出路是把动作升级为**跨题通用的语义类别**
+  （如「是否与人物关系有关」），这是下一步工作。
+
+  评测协议见 eval_generalization.py，前提约束由 tests/test_generalization.py
+  守护（其中「已知局限」类断言在真正实现泛化后应失败并予更新）。
 """
 from __future__ import annotations
 
@@ -55,11 +83,10 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .base import Player
 from engine.game import Puzzle
-from engine.evaluate import char_f1
+from engine.evaluate import char_f1, is_confirm  # is_confirm 走口径唯一真值
 
-# 兼容旧导入路径：默认动作库由 build_action_bank 惰性派生，此处不硬编码
+# 「无关」判定属 RL 奖励口径（无信息惩罚），与评测口径分离，故留在本模块
 UNINFORMATIVE_ANSWERS = ("无关", "不重要")
-CONFIRM_ANSWERS = ("是", "对", "正确", "是的", "没错", "yes")
 
 REPEAT_PENALTY = -0.5
 UNINFORMATIVE_PENALTY = -0.2
@@ -113,12 +140,6 @@ def parse_question_keyword(question: str) -> Optional[str]:
     if "「" in question and "」" in question:
         return question.split("「", 1)[1].split("」", 1)[0]
     return None
-
-
-def is_confirm(answer: str) -> bool:
-    """主持回答是否构成「确认」——用于终局还原只采纳被肯定的线索。"""
-    a = answer.strip()
-    return a in CONFIRM_ANSWERS or a.startswith("是")
 
 
 def step_reward(is_repeat: bool, answer: str) -> float:
