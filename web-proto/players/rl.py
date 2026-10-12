@@ -4,52 +4,62 @@
   当前实现是**单智能体 RL**——只学习提问者侧的「动作选择」策略。
   对局环境本身是多智能体（主持 + 提问者），但主持当前是固定策略（Mock），
   不参与学习。完整 MARL（提问者与主持联合训练 / 自对弈对抗欺骗）为后续
-  扩展；本模块 Policy 接口（select_action / update）已按可直接扩展设计，
-  联合训练只需再实例化一个策略给主持并共用同一 reward 通道。
+  扩展；本模块 Policy 接口（select_action / update）已按可直接扩展设计。
 
 为什么动作空间必须是离散的：
   文本提问的动作空间无限，直接对文本做 RL 不可行。这里把「提问」抽象为
   「从有限候选库里选一条」，策略只在有限动作集上决策——这是让 RL 落到
   非结构化文本任务上的标准做法（动作抽象 / action abstraction）。
 
-动作库设计：
-  由题库 golden_qa 关键词派生，刻意混入「信息型」与「无关型」动作：
-    信息型：肉 / 获救（题001）、热气球 / 抽签（题002）→ 主持答「是」
-    无关型：钱 / 水                                  → 主持答「无关」
+────────────────────────────────────────────────────────────────────
+状态表示（2026-10-12 修正，这是本模块最关键的一次修复）
+────────────────────────────────────────────────────────────────────
+  state = 「题目 ID | 已问动作集合」
 
-实测可学信号（2026-10-12 · 务必按事实陈述，勿照抄设计预期）：
-  ① **不重复已问动作**——稳定可学。5 个随机种子全部成立（见
-     tests/test_rl.py）：已问动作的 Q 显著低于未问动作。
-  ② **偏好信息型动作**——⚠️ **学不出来（已证伪的负向结论）**。
-     设计预期是「信息型平均 +0.2、无关型 −0.2，存在 0.4 差距」，但实测：
-     eps∈{0.15,0.3,0.5} × 局数∈{400,800,1200,1500,3000} 共 5 组配置，
-     且额外做了「每局随机抽题」以打散题目轮换与动作选择的相位耦合，
-     结果 12 组中 8 组失败、动作排序随种子乱跳（无关动作「水」甚至排到过第一）。
-     原因：每个信息型动作只在 3 题中的 1 题上有效，单步奖励方差极大
-     （+1 或 −0.2），叠加贪心自强化导致各动作访问次数悬殊、Q 估计被带偏；
-     终局 F1 奖励还带题目特异性，进一步掩盖那 0.4 的差距。
-     → 要让②可学，需要「在多数题目上都有效」的动作（更大题库 / 语义化动作），
-       而非当前与单题绑定的关键词动作。
+  早期版本 state 只有「已问动作集合」，不含题目 → 构成一个 POMDP：
+  策略看不到当前是哪道题，却被要求区分「哪个动作对本题有用」。
+  而动作库是由题库关键词派生的，天然与单题绑定（「肉」只在题001 有用、
+  「热气球」只在题002 有用），于是同一状态 '' 在三个题上共享同一组 Q 值，
+  数学上只能收敛到跨题混合平均，「偏好有信息量的动作」在这个表示下
+  **根本不可表达**——不是学不出来，是表示不允许。
 
-已知局限（诚实）：
-  本模块当前价值是打通「L2 策略可训练 + 可评测 + 可对比」的完整链路，
-  并给出一条可复现的学习证据（贪心 > 随机，由信号①驱动）。
-  **不宣称**策略已具备通用提问或推理能力。
+  把题目并入状态是**物理合法**的：真实海龟汤里，汤面（surface）本就是
+  提问者可见的输入，不是答案泄漏。这里用 soup_id 作为题目键。
+
+  ⚠️ 代价（必须一并陈述）：这样得到的策略是**按题查表的条件记忆**，
+  对未训练过的新题零泛化（状态键不存在 → Q 全零 → 退化为随机）。
+  要真正泛化，状态特征必须从「题目 ID」升级为「汤面的语义特征」，
+  这是后续工作，当前**不宣称**具备泛化能力。
+
+动作库（2026-10-12 改为从题库派生）：
+  早期版本动作库是硬编码的 6 个词，存在一个致命漏洞：**题003 上没有任何
+  一个动作是有效的**（其 golden_qa 关键词一个都没被收录）→ 三分之一
+  的训练局里无论怎么问都只拿到惩罚，系统性污染所有动作的 Q 估计。
+  现改为 build_action_bank() 从题库 golden_qa 自动派生，杜绝该漏洞。
+    有信息型（答案为 是/否）——海龟汤里「否」同样缩小假设空间，计为有信息
+    无信息型（答案为 无关）
+
+实测可学信号（务必按事实陈述，勿照抄设计预期）：
+  ① **不重复已问动作**——稳定可学，跨 5 个随机种子全部成立。
+  ② **偏好有信息量的动作**——早期版本（无题目状态）**证伪**：
+     eps×局数 5 组配置 + 每局随机抽题打散相位耦合，12 组中 8 组失败、
+     排序随种子乱跳。根因即上述 POMDP 表示缺陷，非样本量问题。
+     修正状态表示后已可学（见 tests/test_rl.py），但代价是退化为按题记忆。
 """
 from __future__ import annotations
 
 import json
 import os
 import random
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .base import Player
 from engine.game import Puzzle
 from engine.evaluate import char_f1
 
-# 动作库：信息型（前 4）+ 无关型（后 2），见模块文档
-ACTION_BANK: List[str] = ["肉", "获救", "热气球", "抽签", "钱", "水"]
+# 兼容旧导入路径：默认动作库由 build_action_bank 惰性派生，此处不硬编码
 UNINFORMATIVE_ANSWERS = ("无关", "不重要")
+CONFIRM_ANSWERS = ("是", "对", "正确", "是的", "没错", "yes")
 
 REPEAT_PENALTY = -0.5
 UNINFORMATIVE_PENALTY = -0.2
@@ -62,6 +72,33 @@ POLICY_DEFAULT_PATH = os.path.join(
 )
 
 
+def build_action_bank(puzzles: Iterable[Puzzle]) -> Tuple[List[str], Set[int]]:
+    """从题库 golden_qa 派生动作库，返回 (动作列表, 有信息型动作的索引集合)。
+
+    派生而非硬编码的理由：硬编码曾导致题003 上零有效动作（见模块文档）。
+    分类口径：答案为「无关」= 无信息型；其余（是/否）= 有信息型。
+    同一关键词若在两题上答案冲突，以「有信息」为准（保守，避免把有效
+    动作误划为无效）。
+    """
+    informative: List[str] = []
+    uninformative: List[str] = []
+    for p in puzzles:
+        for qa in p.golden_qa:
+            kw = qa.get("contains")
+            if not kw:
+                continue
+            if qa.get("answer") in UNINFORMATIVE_ANSWERS:
+                if kw not in uninformative and kw not in informative:
+                    uninformative.append(kw)
+            else:
+                if kw not in informative:
+                    informative.append(kw)
+                if kw in uninformative:
+                    uninformative.remove(kw)
+    bank = informative + uninformative
+    return bank, set(range(len(informative)))
+
+
 def render_question(keyword: str) -> str:
     """把动作（关键词）渲染成自然语言提问。
 
@@ -71,8 +108,24 @@ def render_question(keyword: str) -> str:
     return f"这件事和「{keyword}」有关吗？"
 
 
+def parse_question_keyword(question: str) -> Optional[str]:
+    """从渲染后的问句里取回关键词（「…」之间的内容）。"""
+    if "「" in question and "」" in question:
+        return question.split("「", 1)[1].split("」", 1)[0]
+    return None
+
+
+def is_confirm(answer: str) -> bool:
+    """主持回答是否构成「确认」——用于终局还原只采纳被肯定的线索。"""
+    a = answer.strip()
+    return a in CONFIRM_ANSWERS or a.startswith("是")
+
+
 def step_reward(is_repeat: bool, answer: str) -> float:
-    """单步奖励：重复提问罚最重，无信息次之，有信息为正。"""
+    """单步奖励：重复提问罚最重，无信息次之，有信息为正。
+
+    「否」同样计为有信息：海龟汤里否定回答也缩小假设空间。
+    """
     if is_repeat:
         return REPEAT_PENALTY
     if answer in UNINFORMATIVE_ANSWERS:
@@ -91,9 +144,9 @@ def terminal_reward(guess: str, solution: str) -> float:
 class TabularQPolicy:
     """离散动作空间的表格 Q 学习（epsilon-greedy）。
 
-    state = 已问动作集合（排序元组转字符串键）。选择「集合」而非「序号」
-    是为了让「不要重复提问」成为可学习状态特征——若状态不含已问信息，
-    策略无法区分重复与新问。
+    state 接受两种形式：字符串（推荐，形如「题ID|已问动作」）或整数序列
+    （旧格式，按已问动作集合编码）。保留旧格式仅为向后兼容，新代码一律
+    走字符串状态——题目信息无法用动作索引表达。
     """
 
     def __init__(self, n_actions: int, alpha: float = 0.35, gamma: float = 0.9,
@@ -105,16 +158,18 @@ class TabularQPolicy:
         self.Q: Dict[str, List[float]] = {}
         self._rng = random.Random(seed)
 
-    def _key(self, state: Sequence[int]) -> str:
+    def _key(self, state) -> str:
+        if isinstance(state, str):
+            return state
         return ",".join(str(i) for i in sorted(set(state)))
 
-    def _q(self, state: Sequence[int]) -> List[float]:
+    def _q(self, state) -> List[float]:
         k = self._key(state)
         if k not in self.Q:
             self.Q[k] = [0.0] * self.n_actions
         return self.Q[k]
 
-    def select_action(self, state: Sequence[int], explore: bool = True) -> int:
+    def select_action(self, state, explore: bool = True) -> int:
         """epsilon-greedy 选动作；explore=False 或 epsilon=0 时为纯贪心。"""
         q = self._q(state)
         if explore and self._rng.random() < self.epsilon:
@@ -122,11 +177,11 @@ class TabularQPolicy:
         # 贪心：并列时取 index 最小者（确定性，便于复现）
         return max(range(self.n_actions), key=lambda a: (q[a], -a))
 
-    def greedy_action(self, state: Sequence[int]) -> int:
+    def greedy_action(self, state) -> int:
         return self.select_action(state, explore=False)
 
-    def update(self, state: Sequence[int], action: int, reward: float,
-               next_state: Sequence[int], done: bool = False) -> None:
+    def update(self, state, action: int, reward: float,
+               next_state, done: bool = False) -> None:
         q = self._q(state)
         target = reward
         if not done:
@@ -154,13 +209,22 @@ class RLQuestioner(Player):
     def __init__(self, policy: Optional[TabularQPolicy] = None,
                  id: str = "rl-questioner", model: str = "tabular-q",
                  action_bank: Optional[Sequence[str]] = None,
-                 explore: bool = True):
+                 informative: Optional[Set[int]] = None,
+                 explore: bool = True,
+                 use_puzzle_state: bool = True):
         super().__init__(id, model)
-        self.bank: List[str] = list(action_bank or ACTION_BANK)
+        self.bank: List[str] = list(action_bank or [])
+        if not self.bank:
+            raise ValueError(
+                "必须提供 action_bank（用 build_action_bank(puzzles) 从题库派生）："
+                "硬编码动作库曾造成部分题目零有效动作的系统性漏洞。"
+            )
+        self.informative: Set[int] = set(informative or ())
         self.policy = policy or TabularQPolicy(len(self.bank))
         self.explore = explore
-        # 训练回路需要知道「这一步用了哪个状态/动作」，由 ask_question 记录
-        self.last_state: Tuple[int, ...] = tuple()
+        # 关闭后回到早期（缺陷）表示，仅用于对照实验，勿用于生产
+        self.use_puzzle_state = use_puzzle_state
+        self.last_state: str = ""
         self.last_action: int = -1
 
     def _asked_actions(self, transcript: Sequence[dict]) -> List[int]:
@@ -169,52 +233,75 @@ class RLQuestioner(Player):
         for m in transcript:
             if m.get("role") != "question" or m.get("speaker") != self.id:
                 continue
-            content = m.get("content", "")
-            for i, kw in enumerate(self.bank):
-                if f"「{kw}」" in content:
-                    asked.append(i)
-                    break
+            kw = parse_question_keyword(m.get("content", ""))
+            if kw in self.bank:
+                asked.append(self.bank.index(kw))
         return asked
 
+    def state_key(self, puzzle: Puzzle, transcript: Sequence[dict]) -> str:
+        asked = tuple(sorted(set(self._asked_actions(transcript))))
+        prefix = f"{getattr(puzzle, 'soup_id', 'unknown')}|" if self.use_puzzle_state else ""
+        return f"{prefix}{','.join(str(i) for i in asked)}"
+
     def ask_question(self, puzzle: Puzzle, transcript: List[dict]) -> str:
-        asked = self._asked_actions(transcript)
-        state = tuple(sorted(set(asked)))
+        state = self.state_key(puzzle, transcript)
         action = self.policy.select_action(state, explore=self.explore)
         self.last_state = state
         self.last_action = action
         return render_question(self.bank[action])
 
     def final_guess(self, puzzle: Puzzle, transcript: List[dict]) -> str:
-        """终局还原：把问答证据串成一段话（确定性，不调用模型）。
+        """终局还原：只采纳被主持**确认**的线索，拼成紧凑陈述。
 
-        刻意不加入汤面原文——汤面与汤底字符重合度低，塞进去只会拉低
-        精确率、污染 F1 信号，让奖励变得不可解释。
+        早期版本把「问句原文 + 答案 + 模板废话」整段拼进去，而模板字
+        （「RL 策略还原」「根据问答」「→」等）几乎不出现在汤底里，
+        把精确率压到很低，导致 F1 对提问质量**不敏感**——策略学到的
+        东西无法体现在还原质量上。现改为证据驱动：
+
+          问中的线索越多 → 还原句命中的汤底字符越多 → F1 单调上升
+
+        刻意不做两件事（诚实声明，勿为刷高数字而破例）：
+          · 不回灌汤面原文——汤面与汤底字符重合度低，只会拉低精确率；
+          · 不外推未经确认的情节——外推需要语义生成能力，当前动作抽象
+            做不到，硬凑等于编造证据。
+        因此 F1 上限受「关键词式短还原 vs 长汤底」的字符集合性质限制，
+        实测 oracle（问中所有有效线索）约 0.3~0.4，见 tests/test_rl.py。
         """
-        pairs: List[Tuple[str, str]] = []
+        confirmed: List[str] = []
+        seen: Set[str] = set()
         pending: Optional[str] = None
         for m in transcript:
             role = m.get("role")
             if role == "question":
                 pending = m.get("content", "")
             elif role == "answer" and pending is not None:
-                pairs.append((pending, m.get("content", "")))
+                if is_confirm(m.get("content", "")):
+                    kw = parse_question_keyword(pending)
+                    if kw and kw not in seen:
+                        seen.add(kw)
+                        confirmed.append(kw)
                 pending = None
-        body = "；".join(f"{q}→{a}" for q, a in pairs)
-        return f"【RL 策略还原】根据问答：{body}。我推断真相与上述线索直接相关。"
+        if not confirmed:
+            return "现有线索不足以还原真相。"
+        return "真相与以下要素有关：" + "，".join(confirmed) + "。"
 
 
 def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
-                max_rounds: int = 4, train: bool = True) -> dict:
+                max_rounds: int = 8, train: bool = True) -> dict:
     """跑一局（RL 回路），返回 {reward, f1, transcript}。
 
     train=True 时做 Q 更新。训练与评估共用本函数，避免两套循环实现漂移。
     提问走 questioner.ask_question（而非直接调 policy），确保 Player 接口
     与真实引擎 TurtleSoupGame 的行为完全一致。
+
+    max_rounds 默认 8：默认 4 时即便每轮都问中有效线索，还原句也只有
+    ~9 个去重字符，对 30~70 字的汤底召回率约 0.1，F1 被指标本身压死，
+    看不出策略差异。
     """
     transcript: List[dict] = []
     asked: List[int] = []
     total = 0.0
-    traj: List[Tuple[Tuple[int, ...], int, float]] = []
+    traj: List[Tuple[str, int, float]] = []
 
     for r in range(1, max_rounds + 1):
         question = questioner.ask_question(puzzle, transcript)
@@ -248,6 +335,6 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
         G = term
         for (state, action, rew) in reversed(traj):
             G = rew + questioner.policy.gamma * G
-            questioner.policy.update(state, action, G, tuple(), done=True)
+            questioner.policy.update(state, action, G, "|", done=True)
 
     return {"reward": total, "f1": f1, "transcript": transcript, "guess": guess}
