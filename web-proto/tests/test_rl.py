@@ -29,14 +29,20 @@ def _bank():
     return build_action_bank(load_puzzles())
 
 
-def _train(seed=0, episodes=200, bank=None, info=None):
+# **按题固定**训练量：题库扩到 12 题（动作库 92 个）后，实测每题需 ≥600 局
+# 信息型/无信息型动作的 Q 才分离（每题 100 局时 gap 仍为 -0.127）。
+# 若写成总 episodes，题库一扩就变成「每题训练不足」，会把欠拟合误读成无信号。
+PER_PUZZLE_EPISODES = 600
+
+
+def _train(seed=0, per_puzzle=PER_PUZZLE_EPISODES, bank=None, info=None):
     puzzles = load_puzzles()
     bank, info = bank or _bank()[0], info or _bank()[1]
     host = MockHost()
     policy = TabularQPolicy(len(bank), seed=seed)
     q = RLQuestioner(policy=policy, action_bank=bank, informative=info,
                      explore=True)
-    for ep in range(episodes):
+    for ep in range(per_puzzle * len(puzzles)):
         run_episode(puzzles[ep % len(puzzles)], host, q,
                     max_rounds=MAX_ROUNDS, train=True)
     return policy, bank, info, puzzles
@@ -189,7 +195,7 @@ def test_trained_policy_beats_random_on_reward_and_f1():
     只比奖励不够——奖励是代理指标，可能被「不重复」这类取巧行为刷高。
     F1 是还原质量本身，两者同时成立才算真的学到了有用的提问策略。
     """
-    policy, bank, info, puzzles = _train(seed=0, episodes=200)
+    policy, bank, info, puzzles = _train(seed=0)
     g_r, g_f1 = _eval(policy, bank, info, puzzles, explore=False)
     r_r, r_f1 = _eval(TabularQPolicy(len(bank), epsilon=1.0, seed=0),
                       bank, info, puzzles, explore=True)
@@ -207,8 +213,11 @@ def test_informative_preference_is_stable_across_seeds():
     旧表示（状态不含题目）下该信号不可学——12 组配置中 8 组失败、排序随
     种子乱跳。根因是 POMDP，不是样本量。此测试同时也是该修复的回归守护。
     """
+    # 本信号是三者中最弱的，需更大训练量才跨种子稳定。实测信息型-无信息型
+    # 平均 Q 差的最小值：600 局/题 → -0.004（不稳）；1000 → +0.049；
+    # 1500 → +0.100；2500 → +0.091。取 1500（margin 够且不必更慢）。
     for seed in (0, 1, 2):
-        policy, bank, info, puzzles = _train(seed=seed, episodes=200)
+        policy, bank, info, puzzles = _train(seed=seed, per_puzzle=1500)
         gaps = []
         for p in puzzles:
             row = policy.Q.get(f"{p.soup_id}|")
@@ -227,7 +236,7 @@ def test_informative_preference_is_stable_across_seeds():
 
 def test_avoids_repeating_asked_actions():
     """不重复已问动作：经多种子验证的稳定信号。"""
-    policy, bank, info, puzzles = _train(seed=0, episodes=200)
+    policy, bank, info, puzzles = _train(seed=0)
     p = puzzles[0]
     row = policy.Q.get(f"{p.soup_id}|0", [0.0] * len(bank))
     best_unasked = max(row[i] for i in range(len(bank)) if i != 0)
