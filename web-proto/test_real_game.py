@@ -12,17 +12,30 @@ import os
 import sys
 
 # 手动加载 .env 到环境变量（不依赖 python-dotenv）
-def load_env(path=".env"):
+def _load_one(path):
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
+                s = line.strip()
+                if not s or s.startswith("#") or "=" not in s:
                     continue
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+                k, v = s.split("=", 1)
+                k = k.strip()
+                # 去掉行内注释（首个 # 之后），再剥引号与首尾空白——否则含中文的
+                # 注释会被塞进 Authorization 头，触发 latin-1/ascii 编码错误并掩盖真实 auth 报错
+                v = v.split("#", 1)[0].strip().strip('"').strip("'")
+                if k:
+                    os.environ.setdefault(k, v)
     except FileNotFoundError:
         pass
+
+
+def load_env():
+    # 本地 .env 优先；workspace/.env 作为兜底（deepseek/qwen 等 key 按项目布局放在该线）
+    here = os.path.dirname(os.path.abspath(__file__))
+    _load_one(os.path.join(here, ".env"))
+    _load_one(os.path.join(here, "..", "workspace", ".env"))
+
 
 load_env()
 
