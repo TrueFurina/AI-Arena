@@ -75,11 +75,18 @@ def _call(
     max_tokens: int = 400,
     retries: int = 3,
     timeout: int = 60,
+    extra_body: Optional[dict] = None,
 ) -> str:
     """统一调用入口（懒加载 litellm，仅在用到真实模型时依赖）。
 
     对空响应与异常做重试（指数退避，尊重 429 限速）；全部失败后抛 LLMError，
     由各 Player 方法按角色给出降级回复，保证对局不会因单次调用失败而中断。
+
+    extra_body：端点私有参数透传（默认 None = 行为与此前逐位一致）。
+    存在的理由：glm-4.5 等 **thinking 模型**会把 max_tokens 全部消耗在
+    reasoning 上（实测 finish_reason=length、content 为空、reasoning 1399
+    字符），调用方看到的是 `empty_content`——需显式传
+    `{"thinking": {"type": "disabled"}}` 才能拿到正文。
     """
     import litellm
 
@@ -112,6 +119,8 @@ def _call(
         kwargs["api_key"] = api_key
     if api_base:
         kwargs["api_base"] = api_base
+    if extra_body:
+        kwargs["extra_body"] = extra_body
 
     last_err = "unknown"
     for attempt in range(1, retries + 1):
