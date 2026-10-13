@@ -61,7 +61,20 @@ class MatchRecorder:
     # 记录构造
     # ------------------------------------------------------------------
     def build_record(self, res: Dict[str, Any],
-                     judge_id: str = "default-judge") -> EvaluationRecord:
+                     judge_id: str = "default-judge",
+                     verdict_extra: Optional[Dict[str, Any]] = None,
+                     ) -> EvaluationRecord:
+        """构造被签名的记录。
+
+        verdict_extra（P3）：把多裁判共识结论写进 `verdict`，使其与客观指标
+        同等受签名保护——若共识只出现在报告里，改报告即可改数字，那就不是
+        「链上共识」而只是一段旁附文字。
+
+        刻意不接受覆盖既有键：共识字典若与 `judge_id`/`winner`/`scores`
+        撞键，说明调用方传错了东西，抛错而不是静默取其一（静默 fallback
+        比报错危险，本项目既有教训）。`verdict_extra=None` 时本函数行为
+        与 P1 逐字段一致（向后兼容有测试守护）。
+        """
         metrics = metrics_from_result(res)
         puzzle = res.get("puzzle", {}) or {}
         scores = res.get("scores", []) or []
@@ -82,6 +95,13 @@ class MatchRecorder:
                 for s in scores
             ],
         }
+
+        if verdict_extra is not None:
+            clash = sorted(set(verdict_extra) & set(verdict))
+            if clash:
+                raise ValueError(
+                    f"verdict_extra 不得覆盖既有 verdict 字段：{clash}")
+            verdict.update(verdict_extra)
 
         return EvaluationRecord(
             match_id=str(res.get("game_id", "unknown")),
@@ -124,8 +144,11 @@ class MatchRecorder:
         )
 
     def issue_from_result(self, res: Dict[str, Any],
-                          judge_id: str = "default-judge") -> Credential:
-        return self.issue(self.build_record(res, judge_id=judge_id))
+                          judge_id: str = "default-judge",
+                          verdict_extra: Optional[Dict[str, Any]] = None,
+                          ) -> Credential:
+        return self.issue(self.build_record(res, judge_id=judge_id,
+                                            verdict_extra=verdict_extra))
 
     # ------------------------------------------------------------------
     # 上链（失败降级，绝不阻塞评测）
