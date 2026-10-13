@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, request, render_template_string, send_file, jsonify
+from flask import Flask, request, render_template_string, send_from_directory, jsonify
 
 from engine.game import TurtleSoupGame, Puzzle
 from engine.puzzles import load_puzzles, get_puzzle
@@ -289,12 +289,15 @@ def evaluate():
 
 @app.route("/report/<path:name>")
 def report_file(name):
-    return send_file(os.path.join(LOGS, name))
+    # 安全（2026-10-13）：曾用 send_file(os.path.join(LOGS, name))——name 含
+    # "../" 可穿越到 .env / data/chain_keys/*.pem。send_from_directory 内部
+    # safe_join 拒绝穿越（越界即 404），是 Flask 官方的安全形态
+    return send_from_directory(LOGS, name)
 
 
 @app.route("/logs/<path:name>")
 def log_file(name):
-    return send_file(os.path.join(LOGS, name), mimetype="application/json")
+    return send_from_directory(LOGS, name, mimetype="application/json")
 
 
 @app.route("/verify")
