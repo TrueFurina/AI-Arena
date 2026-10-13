@@ -17,7 +17,8 @@
 |---|---|---|---|
 | L1 决策 | 多 LLM 角色对抗（提问者/主持/裁判）+ litellm 多模型 | `web-proto/players/llm.py`、`run_crossplay.py` | deepseek F1 0.53 vs glm-4-flash 0.29（3 题样本）；cross-play 2×2 证明**提问者主导还原质量**（+0.27 F1），主持效应 ±0.03 |
 | L2 执行 | 表格 Q 学习提问策略 + 语义化动作空间 | `players/rl.py`、`engine/semantic.py` | 贪心奖励 +6.226 / F1 0.313 vs 随机 +0.922 / 0.163（600 局）；语义动作新题 dhit 0.42~0.56 vs 关键词 0.00~0.17 |
-| 指标口径 | 单一真值（防漂移） | `engine/evaluate.py` | `char_f1` / `hit_rate` / `dhit` / `is_confirm` 全部收敛，历史值被测试锁定 |
+| 指标口径 | 单一真值（防漂移） | `engine/evaluate.py` | `char_f1` / `hit_rate` / `dhit` / `tdhit` / `is_confirm` 全部收敛，历史值被测试锁定 |
+| P3 贯通 | 一键流水线 + 前端验签入口 | `pipeline.py`、`pipeline_report.py`、`web_app.py:/verify` | 4 条命令实测通过（共识已发布 R=1.437 cw-pbft / 拒绝发布 score=None / identity=ok）；119/119 全绿，六条变异全杀 |
 | 题库 | 12 题，跨题「是」关键词零重叠 | `puzzles.json` | 题内无子串冲突（MockHost 顺序匹配，冲突会静默给错答案） |
 | 评测协议 | held-out 泛化评测 + 未训练/随机/先验/oracle 四基线 | `eval_generalization.py` | 三种模式可控对照 |
 | 测试 | **37 例全绿**，关键断言均做过变异验证 | `tests/` | 三条变异（dhit 分母 / 题目状态 / 类别答案来源）全部被杀死 |
@@ -284,13 +285,35 @@ episodes × 共演 2 轮，71.7s；报告 `web-proto/logs/marl_report.md`）**�
 
 ---
 
-### P3 · 贯通与报告（工作量：中）
+### P3 · 贯通与报告 ✅ 已完成（2026-10-13，提交 100503f/0110850）
 
-| 项 | 内容 |
+> 完整设计（含三条设计判断与六条变异记录）：[`web-proto/DESIGN-P3-PIPELINE.md`](web-proto/DESIGN-P3-PIPELINE.md)
+
+**实测**（venv `ai-arena-proto`，四条命令退出码均 0）：
+
+| 命令 | 结果 |
 |---|---|
-| P3-1 | 一键流水线：跑评测 → 出指标 → 上链 → 出报告（含凭证 ID 与验签入口） |
-| P3-2 | 前端（`web_app.py`）接凭证校验入口：粘贴 tx_id 即可验证一局结论是否被篡改 |
-| P3-3 | 对接 `workspace/run/report_share.py` 的出报告能力 |
+| `python pipeline.py` | 凭证 `in-pool`，验签 ✅（digest+signature） |
+| `python pipeline.py --panel hetero` | 共识**已发布** 30.5559 ｜ 等权 30.51 ｜ R=1.437 ｜ 后端 **cw-pbft**（真实链，未降级） |
+| `python pipeline.py --panel hetero --absent j0,j1` | 共识**拒绝发布** score=None，报告共识位 `—`，退出码仍 0 |
+| `python pipeline.py --panel hetero --identity` | 三步全通过，identity=**ok** |
+
+测试 **119/119 全绿**（P3 新增 17 例）；六条变异全部被杀死。
+
+**三条设计判断（本阶段的价值所在，改动前先读设计文档）**：
+1. **共识拒绝发布不得被填补**——`accepted=False` 时报告留空并标 REJECTED。
+   若写成 `score or fallback`，P2-A 的内核（拒绝给数）当场退化成装饰，
+   与 P1 批评过的「盖戳式存证」同类错误，只是位置更隐蔽
+2. **共识结论必须进签名对象**（`verdict_extra`）——否则改报告即改数字，
+   「链上共识」名不副实。chain 层不 import judges，由流水线注入
+3. **`tx_id` 不能凭空验签**——它只是链上索引。前端 tx_id 入口只检索本机
+   凭证库；未命中报「未命中」(`ok=None`)，**绝不成**「验签失败」(`ok=False`)
+
+| 项 | 内容 | 状态 |
+|---|---|---|
+| P3-1 | 一键流水线：`pipeline.py` 对局→指标→共识→凭证→报告（含凭证 ID 与验签入口） | ✅ |
+| P3-2 | 前端验签入口：`/verify` + `/api/verify`（粘贴凭证 JSON 全验签 / tx_id 检索） | ✅ |
+| P3-3 | 对接 `workspace/run/report_share.py` 的出报告能力 | ⬜ 非阻塞（本项目自有 markdown 报告已满足 F1） |
 
 ---
 
@@ -347,7 +370,11 @@ P2-B B-1 已实现并完成服务器首跑（102/102，5 seeds × 5 λ）：预�
 两个仪表/参数问题（tdhit 每谎伤害恒等式、λ=0.05 处理惰性，均留痕 §6-A），
 完整实验给出**诚实负结果**——训练主持不稳健优于 random-liar、提问者无反制
 增益（E2 如预测趋平），阶段目标「评测台能评测 MARL agent」以 E3 达成；结论是
-本环境战略空间稀薄，「战略欺骗」需要更丰富设置才有可学结构。接下来：
-① 余额到账后补真实 LLM 裁判标定（P2-A 剩余唯一项）；② 若继续 L2 深度，
-方向是环境丰富化（LLM 主持/搪塞轴 B-1b）而非本设置加训练量；③ P3 一键流水线
-+ 前端验签入口。题库扩容与真实模型放量非当前瓶颈。**
+本环境战略空间稀薄，「战略欺骗」需要更丰富设置才有可学结构。
+**P3（一键流水线 + 前端验签入口）已完成（119/119，六条变异全杀）**：把 P1 凭证
+与 P2-A 共识串成一条链，价值在三条守卫——共识拒绝发布不得被填补（否则内核
+退化成装饰）、共识结论必须进签名对象（否则改报告即改数字）、tx_id 不能凭空
+验签（未命中≠失败）。接下来：① 余额到账后补真实 LLM 裁判标定（P2-A 剩余
+唯一项）；② 若继续 L2 深度，方向是环境丰富化（LLM 主持/搪塞轴 B-1b）而非
+本设置加训练量；③ P3-3 对接资产库出报告脚本（非阻塞）。题库扩容与真实模型
+放量非当前瓶颈。**
