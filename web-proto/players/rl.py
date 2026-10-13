@@ -95,6 +95,10 @@ from engine.evaluate import char_f1, is_confirm  # is_confirm 走口径唯一真
 
 # 「无关」判定属 RL 奖励口径（无信息惩罚），与评测口径分离，故留在本模块
 UNINFORMATIVE_ANSWERS = ("无关", "不重要")
+# B-1b 搪塞答案词表（DESIGN-P2B1B-EVASION.md §2 约束 3）：与「无关」
+# （不可解析、无真值）**分开维护**——提问者必须能区分「被搪塞（可转化）」
+# 与「无真值（转化也无用）」，混进同一个元组就是口径漂移。
+EVASIVE_ANSWERS = ("与此无关",)
 
 REPEAT_PENALTY = -0.5
 UNINFORMATIVE_PENALTY = -0.2
@@ -150,14 +154,24 @@ def parse_question_keyword(question: str) -> Optional[str]:
     return None
 
 
-def step_reward(is_repeat: bool, answer: str) -> float:
+def step_reward(is_repeat: bool, answer: str,
+                converted: bool = False) -> float:
     """单步奖励：重复提问罚最重，无信息次之，有信息为正。
 
     「否」同样计为有信息：海龟汤里否定回答也缩小假设空间。
+
+    converted=True（B-1b 转化）：本问句此前被搪塞、**从未得到过回答**——
+    「复问刷哨」惩罚（−0.5）的立法目的是压制无新信息的重复提问，不适用
+    于拿回一个从未得到过的答案；得到是/否 记 +1.0，仍是无信息则 −0.2。
+    默认 False 时行为与 B-1 逐位一致（测试固化）。
     """
+    if converted:
+        if answer in UNINFORMATIVE_ANSWERS or answer in EVASIVE_ANSWERS:
+            return UNINFORMATIVE_PENALTY
+        return INFORMATIVE_REWARD
     if is_repeat:
         return REPEAT_PENALTY
-    if answer in UNINFORMATIVE_ANSWERS:
+    if answer in UNINFORMATIVE_ANSWERS or answer in EVASIVE_ANSWERS:
         return UNINFORMATIVE_PENALTY
     return INFORMATIVE_REWARD
 
@@ -168,6 +182,31 @@ def terminal_reward(guess: str, solution: str) -> float:
     F1 由环境给出、用作奖励；策略本身**不观测** solution，不存在答案泄漏。
     """
     return TERMINAL_F1_WEIGHT * char_f1(guess, solution)
+
+
+def was_evaded(question: str, transcript: Sequence[dict]) -> bool:
+    """该问句在**本次提问之前**是否得到过搪塞答案（B-1b 转化判定）。
+
+    口径：只扫**历史轮次**——transcript 末尾的最后一次提问（无论其对答
+    是否已入榜）不计入。否则「本次自己的搪塞」会把本步误判成转化。
+    该口径让函数对调用时机不敏感：run_episode 在回答入榜前调用，其它
+    调用方在回答入榜后调用，结果一致。
+    """
+    q_idx = [i for i, m in enumerate(transcript)
+             if m.get("role") == "question"]
+    if not q_idx:
+        return False
+    boundary = q_idx[-1]  # 最后一次提问的位置：其后（含）不是历史轮次
+    pending: Optional[str] = None
+    for m in transcript[:boundary]:
+        role = m.get("role")
+        if role == "question":
+            pending = m.get("content", "")
+        elif role == "answer" and pending is not None:
+            if pending == question and (m.get("content") or "") in EVASIVE_ANSWERS:
+                return True
+            pending = None
+    return False
 
 
 class TabularQPolicy:
@@ -267,10 +306,39 @@ class RLQuestioner(Player):
                 asked.append(self.bank.index(kw))
         return asked
 
+    def _evaded_actions(self, transcript: Sequence[dict]) -> List[int]:
+        """被搪塞过的动作索引（B-1b）：问句得到过 EVASIVE_ANSWERS 回答。
+
+        与 _asked_actions 同样从 transcript 反推（无内部状态），但需要
+        问题→回答配对，故按 speaker 过滤后顺序扫描。多提问者对局下
+        只认自己的问答对。
+        """
+        evaded: List[int] = []
+        pending: Optional[str] = None
+        for m in transcript:
+            role = m.get("role")
+            if role == "question":
+                pending = (m.get("content", "")
+                           if m.get("speaker") == self.id else None)
+            elif role == "answer" and pending is not None:
+                if (m.get("content") or "") in EVASIVE_ANSWERS:
+                    kw = parse_question_keyword(pending)
+                    if kw in self.bank:
+                        idx = self.bank.index(kw)
+                        if idx not in evaded:
+                            evaded.append(idx)
+                pending = None
+        return evaded
+
     def state_key(self, puzzle: Puzzle, transcript: Sequence[dict]) -> str:
         asked = tuple(sorted(set(self._asked_actions(transcript))))
         prefix = f"{getattr(puzzle, 'soup_id', 'unknown')}|" if self.use_puzzle_state else ""
-        return f"{prefix}{','.join(str(i) for i in asked)}"
+        # B-1b：ev 分量**仅在存在搪塞时追加**。空时格式与 B-1 逐位一致
+        # ——无搪塞对局的状态键不变 ⇒ 既有 Q 表/策略文件/基线数字不受影响
+        # （测试固化：同一 transcript 两种实现必须给出同一个键）。
+        ev = tuple(sorted(set(self._evaded_actions(transcript))))
+        suffix = f";ev={','.join(str(i) for i in ev)}" if ev else ""
+        return f"{prefix}{','.join(str(i) for i in asked)}{suffix}"
 
     def ask_question(self, puzzle: Puzzle, transcript: List[dict]) -> str:
         state = self.state_key(puzzle, transcript)
@@ -321,10 +389,16 @@ class RLQuestioner(Player):
                     answers_by_kw[kw].append(m.get("content", ""))
                 pending = None
         # 一贯确认才采纳：全部回答均为确认 → 无冲突（诚实主持下恒成立）；
-        # 出现确认与否定的冲突 → 该类别整体丢弃（抓谎）
+        # 出现确认与否定的冲突 → 该类别整体丢弃（抓谎）。
+        # B-1b 修正：**搪塞答案在确认判定中被忽略**——它不是回答，也不是
+        # 矛盾。不忽略的话，「搪塞→转化→诚实答是」会因那个与此无关被误判
+        # 冲突而丢弃，转化永远无产出（设计文档 §3.4 的核心坑）。
+        # 向后兼容：无搪塞的对局不存在搪塞答案，本规则是恒等变换
+        # （tests/test_evade_host.py 跨种子固化）。
         confirmed: List[str] = [
             kw for kw in order
-            if all(is_confirm(a) for a in answers_by_kw[kw])
+            if all(is_confirm(a) or (a or "") in EVASIVE_ANSWERS
+                   for a in answers_by_kw[kw])
         ]
         if not confirmed:
             return "现有线索不足以还原真相。"
@@ -341,7 +415,8 @@ _HOST_TRAIN_INTERFACE = ("policy", "last_state", "last_action", "last_lied")
 def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
                 max_rounds: int = 8, train: bool = True,
                 train_host: bool = False,
-                lie_cost: float = LIE_COST_DEFAULT) -> dict:
+                lie_cost: float = LIE_COST_DEFAULT,
+                evade_cost: float = 0.0) -> dict:
     """跑一局（RL 回路），返回 {reward, f1, transcript, guess}。
 
     train=True 时做提问者 Q 更新。训练与评估共用本函数，避免两套循环实现漂移。
@@ -356,8 +431,14 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
     主持侧策略，零和镜像——主持每步奖励 = −提问者当步奖励 − λ·[lie]，
     终局奖励 = −2×F1。要求 host 暴露 policy/last_state/last_action/last_lied
     （DeceptiveHost），否则 ValueError。该参数默认 False，且返回 dict 只在
-    开启时**追加** host_reward/n_lies 两个键——默认路径的键集合与数值
-    逐位不变（tests/test_marl_host.py 固化守护）。
+    开启时**追加** host_reward/n_lies/n_evades 三个键——默认路径的键集合
+    与数值逐位不变（tests/test_marl_host.py 固化守护）。
+
+    evade_cost（B-1b，DESIGN-P2B1B-EVASION.md §3.3）：每次搪塞的固定成本，
+    默认 0。主持侧读 `last_evaded`（getattr 默认 False——两动作主持
+    结构上不可能搪塞，这不是静默跳过而是能力缺失的结构性事实）；
+    EvasiveDeceptiveHost 暴露该字段。转化判定（was_evaded）在主持回答
+    入榜前计算，只 matched 历史轮次的搪塞答案。
 
     每局开头调用 host.reset(puzzle)（hasattr 守卫）：DeceptiveHost 的
     谎言配额等每局状态在此归零；无 reset 的主持行为零变化。
@@ -379,6 +460,7 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
     host_traj: List[Tuple[str, int, float]] = []
     host_total = 0.0
     n_lies = 0
+    n_evades = 0
 
     for r in range(1, max_rounds + 1):
         question = questioner.ask_question(puzzle, transcript)
@@ -387,12 +469,16 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
         transcript.append({"round": r, "speaker": questioner.id,
                            "role": "question", "content": question})
 
+        # B-1b 转化判定：必须在主持回答入榜前——此时本次提问尚无对答，
+        # 只会 matched 到历史轮次的搪塞（was_evaded 文档）。
+        converted = was_evaded(question, transcript)
+
         answer = host.answer(puzzle, question, transcript)
         transcript.append({"round": r, "speaker": getattr(host, "id", "host"),
                            "role": "answer", "content": answer})
 
         is_repeat = action in asked
-        rew = step_reward(is_repeat, answer)
+        rew = step_reward(is_repeat, answer, converted=converted)
         asked.append(action)
         traj.append((state, action, rew))
         total += rew
@@ -403,11 +489,15 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
             if h_state is None or h_action is None:
                 continue  # 本轮主持无决策（问题无法解析），不进主持轨迹
             h_lied = bool(host.last_lied)
-            h_rew = -rew - (lie_cost if h_lied else 0.0)
+            h_evaded = bool(getattr(host, "last_evaded", False))
+            h_rew = (-rew - (lie_cost if h_lied else 0.0)
+                     - (evade_cost if h_evaded else 0.0))
             host_traj.append((h_state, h_action, h_rew))
             host_total += h_rew
             if h_lied:
                 n_lies += 1
+            if h_evaded:
+                n_evades += 1
 
     guess = questioner.final_guess(puzzle, transcript)
     transcript.append({"round": max_rounds + 1, "speaker": questioner.id,
@@ -438,4 +528,5 @@ def run_episode(puzzle: Puzzle, host, questioner: RLQuestioner,
     if train_host:
         out["host_reward"] = host_total
         out["n_lies"] = n_lies
+        out["n_evades"] = n_evades
     return out
