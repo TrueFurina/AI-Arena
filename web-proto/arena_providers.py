@@ -21,8 +21,11 @@ from dotenv import load_dotenv
 
 load_dotenv()  # 读取项目根目录 .env
 
+# ⚠️ 历史教训（2026-10-13）：此处曾硬编码明文 key 作默认值，随公开仓库泄漏。
+# 项目铁律「静默 fallback 比报错危险」——烧毁的 key 做默认值是最坏的静默回退，
+# 改为仅从环境变量读取；未配置则空串，调用时鉴权失败会明确报错而非静默用废钥。
 ASHBWIN_BASE = os.getenv("ASHBWIN_API_BASE", "http://203.135.99.69:11000/v1")
-ASHBWIN_KEY = os.getenv("ASHBWIN_API_KEY", "sk-8db30db0-6e4d-4749-8fe7-96cc261dd7aa")
+ASHBWIN_KEY = os.getenv("ASHBWIN_API_KEY", "")
 ASHBWIN_MODEL = os.getenv("ASHBWIN_MODEL", "ashbwin")
 
 

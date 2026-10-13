@@ -17,8 +17,11 @@ import sys
 import json
 import requests
 
+# ⚠️ 历史教训（2026-10-13）：此处曾硬编码明文 key 作默认值，随公开仓库泄漏
+# （git 历史自 e412bf1 起仍含该 key，已视为烧毁）。改为仅从环境变量读取；
+# 未配置则空串，请求会以 401 明确失败，而非静默使用已泄漏的废钥。
 BASE = os.getenv("ASHBWIN_BASE", "http://203.135.99.69:11000/v1")
-KEY = os.getenv("ASHBWIN_KEY", "sk-8db30db0-6e4d-4749-8fe7-96cc261dd7aa")
+KEY = os.getenv("ASHBWIN_KEY", "")
 MODEL = os.getenv("ASHBWIN_MODEL", "ashbwin")
 
 H = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
